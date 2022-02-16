@@ -37,9 +37,10 @@ class binary_writer
 
     @param[in] adapter  output adapter to write to
     */
-    explicit binary_writer(output_adapter_t<CharType> adapter) : oa(std::move(adapter))
+    explicit binary_writer(output_adapter_t<CharType> adapter, const bool is_bjdata_ = false) : oa(std::move(adapter))
     {
         JSON_ASSERT(oa);
+        is_bjdata = is_bjdata_;
     }
 
     /*!
@@ -1333,6 +1334,14 @@ class binary_writer
             }
             write_number(static_cast<std::int16_t>(n));
         }
+        else if (is_bjdata and n <= static_cast<uint64_t>((std::numeric_limits<uint16_t>::max)()))
+        {
+            if (add_prefix)
+            {
+                oa->write_character(to_char_type('u'));  // uint16 - bjdata only
+            }
+            write_number(static_cast<std::uint16_t>(n));
+        }
         else if (n <= static_cast<std::uint64_t>((std::numeric_limits<std::int32_t>::max)()))
         {
             if (add_prefix)
@@ -1341,6 +1350,14 @@ class binary_writer
             }
             write_number(static_cast<std::int32_t>(n));
         }
+        else if (is_bjdata and n <= static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)()))
+        {
+            if (add_prefix)
+            {
+                oa->write_character(to_char_type('m'));  // uint32 - bjdata only
+            }
+            write_number(static_cast<std::uint32_t>(n));
+        }
         else if (n <= static_cast<std::uint64_t>((std::numeric_limits<std::int64_t>::max)()))
         {
             if (add_prefix)
@@ -1348,6 +1365,14 @@ class binary_writer
                 oa->write_character(to_char_type('L'));  // int64
             }
             write_number(static_cast<std::int64_t>(n));
+        }
+        else if (is_bjdata and n <= static_cast<uint64_t>((std::numeric_limits<uint64_t>::max)()))
+        {
+            if (add_prefix)
+            {
+                oa->write_character(to_char_type('M'));  // uint64 - bjdata only
+            }
+            write_number(static_cast<std::uint64_t>(n));
         }
         else
         {
@@ -1396,6 +1421,14 @@ class binary_writer
             }
             write_number(static_cast<std::int16_t>(n));
         }
+        else if (is_bjdata and (static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::max)())))
+        {
+            if (add_prefix)
+            {
+                oa->write_character(to_char_type('u'));  // uint16 - bjdata only
+            }
+            write_number(static_cast<uint16_t>(n));
+        }
         else if ((std::numeric_limits<std::int32_t>::min)() <= n && n <= (std::numeric_limits<std::int32_t>::max)())
         {
             if (add_prefix)
@@ -1404,6 +1437,14 @@ class binary_writer
             }
             write_number(static_cast<std::int32_t>(n));
         }
+        else if (is_bjdata and (static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::max)())))
+        {
+            if (add_prefix)
+            {
+                oa->write_character(to_char_type('m'));  // uint32 - bjdata only
+            }
+            write_number(static_cast<uint32_t>(n));
+        }
         else if ((std::numeric_limits<std::int64_t>::min)() <= n && n <= (std::numeric_limits<std::int64_t>::max)())
         {
             if (add_prefix)
@@ -1411,6 +1452,14 @@ class binary_writer
                 oa->write_character(to_char_type('L'));  // int64
             }
             write_number(static_cast<std::int64_t>(n));
+        }
+        else if (is_bjdata and (static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::min)()) <= n && n <= static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::max)())))
+        {
+            if (add_prefix)
+            {
+                oa->write_character(to_char_type('M'));  // uint64 - bjdata only
+            }
+            write_number(static_cast<std::uint64_t>(n));
         }
         // LCOV_EXCL_START
         else
@@ -1457,13 +1506,25 @@ class binary_writer
                 {
                     return 'I';
                 }
+                if (is_bjdata and ((std::numeric_limits<std::uint16_t>::min)() <= j.m_value.number_integer and j.m_value.number_integer <= (std::numeric_limits<std::uint16_t>::max)()))
+                {
+                    return 'u';
+                }
                 if ((std::numeric_limits<std::int32_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::int32_t>::max)())
                 {
                     return 'l';
                 }
+                if (is_bjdata and ((std::numeric_limits<std::uint32_t>::min)() <= j.m_value.number_integer and j.m_value.number_integer <= (std::numeric_limits<std::uint32_t>::max)()))
+                {
+                    return 'm';
+                }
                 if ((std::numeric_limits<std::int64_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::int64_t>::max)())
                 {
                     return 'L';
+                }
+                if (is_bjdata and ((std::numeric_limits<std::uint64_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint64_t>::max)()))
+                {
+                    return 'M';
                 }
                 // anything else is treated as high-precision number
                 return 'H'; // LCOV_EXCL_LINE
@@ -1483,13 +1544,25 @@ class binary_writer
                 {
                     return 'I';
                 }
+                if (is_bjdata and j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint16_t>::max)()))
+                {
+                    return 'u';
+                }
                 if (j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::int32_t>::max)()))
                 {
                     return 'l';
                 }
+                if (is_bjdata and j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)()))
+                {
+                    return 'm';
+                }
                 if (j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::int64_t>::max)()))
                 {
                     return 'L';
+                }
+                if (is_bjdata and j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::max)()))
+                {
+                    return 'M';
                 }
                 // anything else is treated as high-precision number
                 return 'H'; // LCOV_EXCL_LINE
@@ -1538,6 +1611,7 @@ class binary_writer
     @note This function needs to respect the system's endianness, because bytes
           in CBOR, MessagePack, and UBJSON are stored in network order (big
           endian) and therefore need reordering on little endian systems.
+          BJData is similar to UBJSON but uses little endian by default.
     */
     template<typename NumberType, bool OutputIsLittleEndian = false>
     void write_number(const NumberType n)
@@ -1547,7 +1621,7 @@ class binary_writer
         std::memcpy(vec.data(), &n, sizeof(NumberType));
 
         // step 2: write array to output (with possible reordering)
-        if (is_little_endian != OutputIsLittleEndian)
+        if ((!is_bjdata and (is_little_endian != OutputIsLittleEndian)) or (is_bjdata and !is_little_endian))
         {
             // reverse byte order prior to conversion if necessary
             std::reverse(vec.begin(), vec.end());
@@ -1627,6 +1701,9 @@ class binary_writer
   private:
     /// whether we can assume little endianness
     const bool is_little_endian = little_endianness();
+
+    /// whether to write in bjdata format
+    bool is_bjdata = false;
 
     /// the output
     output_adapter_t<CharType> oa = nullptr;
