@@ -1334,7 +1334,7 @@ class binary_writer
             }
             write_number(static_cast<std::int16_t>(n));
         }
-        else if (is_bjdata and n <= static_cast<uint64_t>((std::numeric_limits<uint16_t>::max)()))
+        else if (is_bjdata && n <= static_cast<uint64_t>((std::numeric_limits<uint16_t>::max)()))
         {
             if (add_prefix)
             {
@@ -1350,7 +1350,7 @@ class binary_writer
             }
             write_number(static_cast<std::int32_t>(n));
         }
-        else if (is_bjdata and n <= static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)()))
+        else if (is_bjdata && n <= static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)()))
         {
             if (add_prefix)
             {
@@ -1366,7 +1366,7 @@ class binary_writer
             }
             write_number(static_cast<std::int64_t>(n));
         }
-        else if (is_bjdata and n <= static_cast<uint64_t>((std::numeric_limits<uint64_t>::max)()))
+        else if (is_bjdata && n <= static_cast<uint64_t>((std::numeric_limits<uint64_t>::max)()))
         {
             if (add_prefix)
             {
@@ -1421,7 +1421,7 @@ class binary_writer
             }
             write_number(static_cast<std::int16_t>(n));
         }
-        else if (is_bjdata and (static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::max)())))
+        else if (is_bjdata && (static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::max)())))
         {
             if (add_prefix)
             {
@@ -1437,7 +1437,7 @@ class binary_writer
             }
             write_number(static_cast<std::int32_t>(n));
         }
-        else if (is_bjdata and (static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::max)())))
+        else if (is_bjdata && (static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::max)())))
         {
             if (add_prefix)
             {
@@ -1453,7 +1453,7 @@ class binary_writer
             }
             write_number(static_cast<std::int64_t>(n));
         }
-        else if (is_bjdata and (static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::min)()) <= n && n <= static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::max)())))
+        else if (is_bjdata && (static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::min)()) <= n && n <= static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::max)())))
         {
             if (add_prefix)
             {
@@ -1506,7 +1506,7 @@ class binary_writer
                 {
                     return 'I';
                 }
-                if (is_bjdata and ((std::numeric_limits<std::uint16_t>::min)() <= j.m_value.number_integer and j.m_value.number_integer <= (std::numeric_limits<std::uint16_t>::max)()))
+                if (is_bjdata && ((std::numeric_limits<std::uint16_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint16_t>::max)()))
                 {
                     return 'u';
                 }
@@ -1514,7 +1514,7 @@ class binary_writer
                 {
                     return 'l';
                 }
-                if (is_bjdata and ((std::numeric_limits<std::uint32_t>::min)() <= j.m_value.number_integer and j.m_value.number_integer <= (std::numeric_limits<std::uint32_t>::max)()))
+                if (is_bjdata && ((std::numeric_limits<std::uint32_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint32_t>::max)()))
                 {
                     return 'm';
                 }
@@ -1522,7 +1522,7 @@ class binary_writer
                 {
                     return 'L';
                 }
-                if (is_bjdata and ((std::numeric_limits<std::uint64_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint64_t>::max)()))
+                if (is_bjdata && ((std::numeric_limits<std::uint64_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint64_t>::max)()))
                 {
                     return 'M';
                 }
@@ -1544,7 +1544,7 @@ class binary_writer
                 {
                     return 'I';
                 }
-                if (is_bjdata and j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint16_t>::max)()))
+                if (is_bjdata && j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint16_t>::max)()))
                 {
                     return 'u';
                 }
@@ -1552,7 +1552,7 @@ class binary_writer
                 {
                     return 'l';
                 }
-                if (is_bjdata and j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)()))
+                if (is_bjdata && j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)()))
                 {
                     return 'm';
                 }
@@ -1560,7 +1560,7 @@ class binary_writer
                 {
                     return 'L';
                 }
-                if (is_bjdata and j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::max)()))
+                if (is_bjdata && j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint64_t>::max)()))
                 {
                     return 'M';
                 }
@@ -1621,7 +1621,7 @@ class binary_writer
         std::memcpy(vec.data(), &n, sizeof(NumberType));
 
         // step 2: write array to output (with possible reordering)
-        if ((!is_bjdata and (is_little_endian != OutputIsLittleEndian)) or (is_bjdata and !is_little_endian))
+        if ((!is_bjdata && (is_little_endian != OutputIsLittleEndian)) or (is_bjdata && !is_little_endian))
         {
             // reverse byte order prior to conversion if necessary
             std::reverse(vec.begin(), vec.end());
