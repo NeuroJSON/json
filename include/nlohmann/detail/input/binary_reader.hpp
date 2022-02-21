@@ -1907,14 +1907,11 @@ class binary_reader
             }
         }
         auto last_token = get_token_string();
-        if (input_format != input_format_t::bjdata)
-        {
-            return sax->parse_error(chars_read, last_token, parse_error::create(113, chars_read, exception_message(input_format, "expected length type specification (U, i, I, l, L); last byte: 0x" + last_token, "string"), BasicJsonType()));
-        }
-        else
+        if (input_format == input_format_t::bjdata)
         {
             return sax->parse_error(chars_read, last_token, parse_error::create(113, chars_read, exception_message(input_format, "expected length type specification (U, i, I, u, l, m, L, M); last byte: 0x" + last_token, "string"), BasicJsonType()));
         }
+        return sax->parse_error(chars_read, last_token, parse_error::create(113, chars_read, exception_message(input_format, "expected length type specification (U, i, I, l, L); last byte: 0x" + last_token, "string"), BasicJsonType()));
     }
 
     /*!
@@ -2111,14 +2108,11 @@ class binary_reader
             }
         }
         auto last_token = get_token_string();
-        if (input_format != input_format_t::bjdata)
-        {
-            return sax->parse_error(chars_read, last_token, parse_error::create(113, chars_read, exception_message(input_format, "expected length type specification (U, i, I, l, L) after '#'; last byte: 0x" + last_token, "size"), BasicJsonType()));
-        }
-        else
+        if (input_format == input_format_t::bjdata)
         {
             return sax->parse_error(chars_read, last_token, parse_error::create(113, chars_read, exception_message(input_format, "expected length type specification (U, i, I, u, l, m, L, M) after '#'; last byte: 0x" + last_token, "size"), BasicJsonType()));
         }
+        return sax->parse_error(chars_read, last_token, parse_error::create(113, chars_read, exception_message(input_format, "expected length type specification (U, i, I, l, L) after '#'; last byte: 0x" + last_token, "size"), BasicJsonType()));
     }
 
     /*!
