@@ -13592,7 +13592,7 @@ class binary_writer
     @param[in] adapter  output adapter to write to
     @param[in] is_bjdata_  a boolean, if true, output is BJData format, default is false
     */
-    explicit binary_writer(output_adapter_t<CharType> adapter, const bool is_bjdata_ = false) : oa(std::move(adapter)), is_bjdata(is_bjdata_)
+    explicit binary_writer(output_adapter_t<CharType> adapter) : oa(std::move(adapter))
     {
         JSON_ASSERT(oa);
     }
@@ -14280,7 +14280,8 @@ class binary_writer
     @param[in] add_prefix  whether prefixes need to be used for this value
     */
     void write_ubjson(const BasicJsonType& j, const bool use_count,
-                      const bool use_type, const bool add_prefix = true)
+                      const bool use_type, const bool add_prefix = true,
+                      const bool use_bjdata = false)
     {
         switch (j.type())
         {
@@ -14306,19 +14307,19 @@ class binary_writer
 
             case value_t::number_integer:
             {
-                write_number_with_ubjson_prefix(j.m_value.number_integer, add_prefix);
+                write_number_with_ubjson_prefix(j.m_value.number_integer, add_prefix, use_bjdata);
                 break;
             }
 
             case value_t::number_unsigned:
             {
-                write_number_with_ubjson_prefix(j.m_value.number_unsigned, add_prefix);
+                write_number_with_ubjson_prefix(j.m_value.number_unsigned, add_prefix, use_bjdata);
                 break;
             }
 
             case value_t::number_float:
             {
-                write_number_with_ubjson_prefix(j.m_value.number_float, add_prefix);
+                write_number_with_ubjson_prefix(j.m_value.number_float, add_prefix, use_bjdata);
                 break;
             }
 
@@ -14328,7 +14329,7 @@ class binary_writer
                 {
                     oa->write_character(to_char_type('S'));
                 }
-                write_number_with_ubjson_prefix(j.m_value.string->size(), true);
+                write_number_with_ubjson_prefix(j.m_value.string->size(), true, use_bjdata);
                 oa->write_characters(
                     reinterpret_cast<const CharType*>(j.m_value.string->c_str()),
                     j.m_value.string->size());
@@ -14346,11 +14347,11 @@ class binary_writer
                 if (use_type && !j.m_value.array->empty())
                 {
                     JSON_ASSERT(use_count);
-                    const CharType first_prefix = ubjson_prefix(j.front());
+                    const CharType first_prefix = ubjson_prefix(j.front(), use_bjdata);
                     const bool same_prefix = std::all_of(j.begin() + 1, j.end(),
-                                                         [this, first_prefix](const BasicJsonType & v)
+                                                         [this, first_prefix, use_bjdata](const BasicJsonType & v)
                     {
-                        return ubjson_prefix(v) == first_prefix;
+                        return ubjson_prefix(v, use_bjdata) == first_prefix;
                     });
 
                     if (same_prefix)
@@ -14364,7 +14365,7 @@ class binary_writer
                 if (use_count)
                 {
                     oa->write_character(to_char_type('#'));
-                    write_number_with_ubjson_prefix(j.m_value.array->size(), true);
+                    write_number_with_ubjson_prefix(j.m_value.array->size(), true, use_bjdata);
                 }
 
                 for (const auto& el : *j.m_value.array)
@@ -14397,7 +14398,7 @@ class binary_writer
                 if (use_count)
                 {
                     oa->write_character(to_char_type('#'));
-                    write_number_with_ubjson_prefix(j.m_value.binary->size(), true);
+                    write_number_with_ubjson_prefix(j.m_value.binary->size(), true, use_bjdata);
                 }
 
                 if (use_type)
@@ -14434,11 +14435,11 @@ class binary_writer
                 if (use_type && !j.m_value.object->empty())
                 {
                     JSON_ASSERT(use_count);
-                    const CharType first_prefix = ubjson_prefix(j.front());
+                    const CharType first_prefix = ubjson_prefix(j.front(), use_bjdata);
                     const bool same_prefix = std::all_of(j.begin(), j.end(),
-                                                         [this, first_prefix](const BasicJsonType & v)
+                                                         [this, first_prefix, use_bjdata](const BasicJsonType & v)
                     {
-                        return ubjson_prefix(v) == first_prefix;
+                        return ubjson_prefix(v, use_bjdata) == first_prefix;
                     });
 
                     if (same_prefix)
@@ -14452,12 +14453,12 @@ class binary_writer
                 if (use_count)
                 {
                     oa->write_character(to_char_type('#'));
-                    write_number_with_ubjson_prefix(j.m_value.object->size(), true);
+                    write_number_with_ubjson_prefix(j.m_value.object->size(), true, use_bjdata);
                 }
 
                 for (const auto& el : *j.m_value.object)
                 {
-                    write_number_with_ubjson_prefix(el.first.size(), true);
+                    write_number_with_ubjson_prefix(el.first.size(), true, use_bjdata);
                     oa->write_characters(
                         reinterpret_cast<const CharType*>(el.first.c_str()),
                         el.first.size());
@@ -14849,20 +14850,22 @@ class binary_writer
     template<typename NumberType, typename std::enable_if<
                  std::is_floating_point<NumberType>::value, int>::type = 0>
     void write_number_with_ubjson_prefix(const NumberType n,
-                                         const bool add_prefix)
+                                         const bool add_prefix,
+                                         const bool use_bjdata = false)
     {
         if (add_prefix)
         {
             oa->write_character(get_ubjson_float_prefix(n));
         }
-        write_number(n);
+        write_number(n, use_bjdata);
     }
 
     // UBJSON: write number (unsigned integer)
     template<typename NumberType, typename std::enable_if<
                  std::is_unsigned<NumberType>::value, int>::type = 0>
     void write_number_with_ubjson_prefix(const NumberType n,
-                                         const bool add_prefix)
+                                         const bool add_prefix,
+                                         const bool use_bjdata = false)
     {
         if (n <= static_cast<std::uint64_t>((std::numeric_limits<std::int8_t>::max)()))
         {
@@ -14870,7 +14873,7 @@ class binary_writer
             {
                 oa->write_character(to_char_type('i'));  // int8
             }
-            write_number(static_cast<std::uint8_t>(n));
+            write_number(static_cast<std::uint8_t>(n), use_bjdata);
         }
         else if (n <= (std::numeric_limits<std::uint8_t>::max)())
         {
@@ -14878,7 +14881,7 @@ class binary_writer
             {
                 oa->write_character(to_char_type('U'));  // uint8
             }
-            write_number(static_cast<std::uint8_t>(n));
+            write_number(static_cast<std::uint8_t>(n), use_bjdata);
         }
         else if (n <= static_cast<std::uint64_t>((std::numeric_limits<std::int16_t>::max)()))
         {
@@ -14886,15 +14889,15 @@ class binary_writer
             {
                 oa->write_character(to_char_type('I'));  // int16
             }
-            write_number(static_cast<std::int16_t>(n));
+            write_number(static_cast<std::int16_t>(n), use_bjdata);
         }
-        else if (is_bjdata && n <= static_cast<uint64_t>((std::numeric_limits<uint16_t>::max)()))
+        else if (use_bjdata && n <= static_cast<uint64_t>((std::numeric_limits<uint16_t>::max)()))
         {
             if (add_prefix)
             {
                 oa->write_character(to_char_type('u'));  // uint16 - bjdata only
             }
-            write_number(static_cast<std::uint16_t>(n));
+            write_number(static_cast<std::uint16_t>(n), use_bjdata);
         }
         else if (n <= static_cast<std::uint64_t>((std::numeric_limits<std::int32_t>::max)()))
         {
@@ -14902,15 +14905,15 @@ class binary_writer
             {
                 oa->write_character(to_char_type('l'));  // int32
             }
-            write_number(static_cast<std::int32_t>(n));
+            write_number(static_cast<std::int32_t>(n), use_bjdata);
         }
-        else if (is_bjdata && n <= static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)()))
+        else if (use_bjdata && n <= static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)()))
         {
             if (add_prefix)
             {
                 oa->write_character(to_char_type('m'));  // uint32 - bjdata only
             }
-            write_number(static_cast<std::uint32_t>(n));
+            write_number(static_cast<std::uint32_t>(n), use_bjdata);
         }
         else if (n <= static_cast<std::uint64_t>((std::numeric_limits<std::int64_t>::max)()))
         {
@@ -14918,15 +14921,15 @@ class binary_writer
             {
                 oa->write_character(to_char_type('L'));  // int64
             }
-            write_number(static_cast<std::int64_t>(n));
+            write_number(static_cast<std::int64_t>(n), use_bjdata);
         }
-        else if (is_bjdata && n <= (std::numeric_limits<uint64_t>::max)())
+        else if (use_bjdata && n <= (std::numeric_limits<uint64_t>::max)())
         {
             if (add_prefix)
             {
                 oa->write_character(to_char_type('M'));  // uint64 - bjdata only
             }
-            write_number(static_cast<std::uint64_t>(n));
+            write_number(static_cast<std::uint64_t>(n), use_bjdata);
         }
         else
         {
@@ -14936,7 +14939,7 @@ class binary_writer
             }
 
             const auto number = BasicJsonType(n).dump();
-            write_number_with_ubjson_prefix(number.size(), true);
+            write_number_with_ubjson_prefix(number.size(), true, use_bjdata);
             for (std::size_t i = 0; i < number.size(); ++i)
             {
                 oa->write_character(to_char_type(static_cast<std::uint8_t>(number[i])));
@@ -14949,7 +14952,8 @@ class binary_writer
                    std::is_signed<NumberType>::value&&
                    !std::is_floating_point<NumberType>::value, int >::type = 0 >
     void write_number_with_ubjson_prefix(const NumberType n,
-                                         const bool add_prefix)
+                                         const bool add_prefix,
+                                         const bool use_bjdata = false)
     {
         if ((std::numeric_limits<std::int8_t>::min)() <= n && n <= (std::numeric_limits<std::int8_t>::max)())
         {
@@ -14957,7 +14961,7 @@ class binary_writer
             {
                 oa->write_character(to_char_type('i'));  // int8
             }
-            write_number(static_cast<std::int8_t>(n));
+            write_number(static_cast<std::int8_t>(n), use_bjdata);
         }
         else if (static_cast<std::int64_t>((std::numeric_limits<std::uint8_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint8_t>::max)()))
         {
@@ -14965,7 +14969,7 @@ class binary_writer
             {
                 oa->write_character(to_char_type('U'));  // uint8
             }
-            write_number(static_cast<std::uint8_t>(n));
+            write_number(static_cast<std::uint8_t>(n), use_bjdata);
         }
         else if ((std::numeric_limits<std::int16_t>::min)() <= n && n <= (std::numeric_limits<std::int16_t>::max)())
         {
@@ -14973,15 +14977,15 @@ class binary_writer
             {
                 oa->write_character(to_char_type('I'));  // int16
             }
-            write_number(static_cast<std::int16_t>(n));
+            write_number(static_cast<std::int16_t>(n), use_bjdata);
         }
-        else if (is_bjdata && (static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::max)())))
+        else if (use_bjdata && (static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint16_t>::max)())))
         {
             if (add_prefix)
             {
                 oa->write_character(to_char_type('u'));  // uint16 - bjdata only
             }
-            write_number(static_cast<uint16_t>(n));
+            write_number(static_cast<uint16_t>(n), use_bjdata);
         }
         else if ((std::numeric_limits<std::int32_t>::min)() <= n && n <= (std::numeric_limits<std::int32_t>::max)())
         {
@@ -14989,15 +14993,15 @@ class binary_writer
             {
                 oa->write_character(to_char_type('l'));  // int32
             }
-            write_number(static_cast<std::int32_t>(n));
+            write_number(static_cast<std::int32_t>(n), use_bjdata);
         }
-        else if (is_bjdata && (static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::max)())))
+        else if (use_bjdata && (static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::min)()) <= n && n <= static_cast<std::int64_t>((std::numeric_limits<std::uint32_t>::max)())))
         {
             if (add_prefix)
             {
                 oa->write_character(to_char_type('m'));  // uint32 - bjdata only
             }
-            write_number(static_cast<uint32_t>(n));
+            write_number(static_cast<uint32_t>(n), use_bjdata);
         }
         else if ((std::numeric_limits<std::int64_t>::min)() <= n && n <= (std::numeric_limits<std::int64_t>::max)())
         {
@@ -15005,7 +15009,7 @@ class binary_writer
             {
                 oa->write_character(to_char_type('L'));  // int64
             }
-            write_number(static_cast<std::int64_t>(n));
+            write_number(static_cast<std::int64_t>(n), use_bjdata);
         }
         // LCOV_EXCL_START
         else
@@ -15016,7 +15020,7 @@ class binary_writer
             }
 
             const auto number = BasicJsonType(n).dump();
-            write_number_with_ubjson_prefix(number.size(), true);
+            write_number_with_ubjson_prefix(number.size(), true, use_bjdata);
             for (std::size_t i = 0; i < number.size(); ++i)
             {
                 oa->write_character(to_char_type(static_cast<std::uint8_t>(number[i])));
@@ -15028,7 +15032,7 @@ class binary_writer
     /*!
     @brief determine the type prefix of container values
     */
-    CharType ubjson_prefix(const BasicJsonType& j) const noexcept
+    CharType ubjson_prefix(const BasicJsonType& j, const bool use_bjdata = false) const noexcept
     {
         switch (j.type())
         {
@@ -15052,7 +15056,7 @@ class binary_writer
                 {
                     return 'I';
                 }
-                if (is_bjdata && ((std::numeric_limits<std::uint16_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint16_t>::max)()))
+                if (use_bjdata && ((std::numeric_limits<std::uint16_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint16_t>::max)()))
                 {
                     return 'u';
                 }
@@ -15060,7 +15064,7 @@ class binary_writer
                 {
                     return 'l';
                 }
-                if (is_bjdata && ((std::numeric_limits<std::uint32_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint32_t>::max)()))
+                if (use_bjdata && ((std::numeric_limits<std::uint32_t>::min)() <= j.m_value.number_integer && j.m_value.number_integer <= (std::numeric_limits<std::uint32_t>::max)()))
                 {
                     return 'm';
                 }
@@ -15086,7 +15090,7 @@ class binary_writer
                 {
                     return 'I';
                 }
-                if (is_bjdata && j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint16_t>::max)()))
+                if (use_bjdata && j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint16_t>::max)()))
                 {
                     return 'u';
                 }
@@ -15094,7 +15098,7 @@ class binary_writer
                 {
                     return 'l';
                 }
-                if (is_bjdata && j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)()))
+                if (use_bjdata && j.m_value.number_unsigned <= static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)()))
                 {
                     return 'm';
                 }
@@ -15102,7 +15106,7 @@ class binary_writer
                 {
                     return 'L';
                 }
-                if (is_bjdata && j.m_value.number_unsigned <= (std::numeric_limits<std::uint64_t>::max)())
+                if (use_bjdata && j.m_value.number_unsigned <= (std::numeric_limits<std::uint64_t>::max)())
                 {
                     return 'M';
                 }
@@ -15157,14 +15161,14 @@ class binary_writer
           on big endian systems.
     */
     template<typename NumberType, bool OutputIsLittleEndian = false>
-    void write_number(const NumberType n)
+    void write_number(const NumberType n, const bool use_bjdata = false)
     {
         // step 1: write number to array of length NumberType
         std::array<CharType, sizeof(NumberType)> vec{};
         std::memcpy(vec.data(), &n, sizeof(NumberType));
 
         // step 2: write array to output (with possible reordering)
-        if (is_little_endian != (OutputIsLittleEndian || is_bjdata))
+        if (is_little_endian != (OutputIsLittleEndian || use_bjdata))
         {
             // reverse byte order prior to conversion if necessary
             std::reverse(vec.begin(), vec.end());
@@ -15244,9 +15248,6 @@ class binary_writer
   private:
     /// whether we can assume little endianness
     const bool is_little_endian = little_endianness();
-
-    /// whether to write in bjdata format
-    const bool is_bjdata = false;
 
     /// the output
     output_adapter_t<CharType> oa = nullptr;
@@ -21426,20 +21427,20 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
             const bool use_type = false)
     {
         std::vector<std::uint8_t> result;
-        to_bjdata(j, result, use_size, use_type);
+        to_bjdata(j, result, use_size, use_type, true);
         return result;
     }
 
     static void to_bjdata(const basic_json& j, detail::output_adapter<std::uint8_t> o,
                           const bool use_size = false, const bool use_type = false)
     {
-        binary_writer<std::uint8_t>(o, true).write_ubjson(j, use_size, use_type);
+        binary_writer<std::uint8_t>(o).write_ubjson(j, use_size, use_type, true);
     }
 
     static void to_bjdata(const basic_json& j, detail::output_adapter<char> o,
                           const bool use_size = false, const bool use_type = false)
     {
-        binary_writer<char>(o, true).write_ubjson(j, use_size, use_type);
+        binary_writer<char>(o).write_ubjson(j, use_size, use_type, true);
     }
 
     /// @brief create a BSON serialization of a given JSON value
