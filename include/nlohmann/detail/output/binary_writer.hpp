@@ -1298,7 +1298,7 @@ class binary_writer
                  std::is_floating_point<NumberType>::value, int>::type = 0>
     void write_number_with_ubjson_prefix(const NumberType n,
                                          const bool add_prefix,
-                                         const bool use_bjdata = false)
+                                         const bool use_bjdata)
     {
         if (add_prefix)
         {
@@ -1312,7 +1312,7 @@ class binary_writer
                  std::is_unsigned<NumberType>::value, int>::type = 0>
     void write_number_with_ubjson_prefix(const NumberType n,
                                          const bool add_prefix,
-                                         const bool use_bjdata = false)
+                                         const bool use_bjdata)
     {
         if (n <= static_cast<std::uint64_t>((std::numeric_limits<std::int8_t>::max)()))
         {
@@ -1400,7 +1400,7 @@ class binary_writer
                    !std::is_floating_point<NumberType>::value, int >::type = 0 >
     void write_number_with_ubjson_prefix(const NumberType n,
                                          const bool add_prefix,
-                                         const bool use_bjdata = false)
+                                         const bool use_bjdata)
     {
         if ((std::numeric_limits<std::int8_t>::min)() <= n && n <= (std::numeric_limits<std::int8_t>::max)())
         {
@@ -1479,7 +1479,7 @@ class binary_writer
     /*!
     @brief determine the type prefix of container values
     */
-    CharType ubjson_prefix(const BasicJsonType& j, const bool use_bjdata = false) const noexcept
+    CharType ubjson_prefix(const BasicJsonType& j, const bool use_bjdata) const noexcept
     {
         switch (j.type())
         {
