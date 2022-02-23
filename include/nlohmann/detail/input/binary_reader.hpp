@@ -2100,7 +2100,7 @@ class binary_reader
                 {
                     return false;
                 }
-                result = ( (dim.size() > 0) ? 1 : 0 );
+                result = ( (!dim.empty()) ? 1 : 0 );
                 for (auto i : dim)
                 {
                     result *= i;
