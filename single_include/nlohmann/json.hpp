@@ -11642,7 +11642,7 @@ class primitive_iterator_t
         return *this;
     }
 
-    primitive_iterator_t const operator++(int) noexcept // NOLINT(readability-const-return-type)
+    primitive_iterator_t operator++(int)& noexcept // NOLINT(cert-dcl21-cpp)
     {
         auto result = *this;
         ++m_it;
@@ -11655,7 +11655,7 @@ class primitive_iterator_t
         return *this;
     }
 
-    primitive_iterator_t const operator--(int) noexcept // NOLINT(readability-const-return-type)
+    primitive_iterator_t operator--(int)& noexcept // NOLINT(cert-dcl21-cpp)
     {
         auto result = *this;
         --m_it;
@@ -12062,7 +12062,7 @@ class iter_impl // NOLINT(cppcoreguidelines-special-member-functions,hicpp-speci
     @brief post-increment (it++)
     @pre The iterator is initialized; i.e. `m_object != nullptr`.
     */
-    iter_impl const operator++(int) // NOLINT(readability-const-return-type)
+    iter_impl operator++(int)& // NOLINT(cert-dcl21-cpp)
     {
         auto result = *this;
         ++(*this);
@@ -12113,7 +12113,7 @@ class iter_impl // NOLINT(cppcoreguidelines-special-member-functions,hicpp-speci
     @brief post-decrement (it--)
     @pre The iterator is initialized; i.e. `m_object != nullptr`.
     */
-    iter_impl const operator--(int) // NOLINT(readability-const-return-type)
+    iter_impl operator--(int)& // NOLINT(cert-dcl21-cpp)
     {
         auto result = *this;
         --(*this);
@@ -12501,7 +12501,7 @@ class json_reverse_iterator : public std::reverse_iterator<Base>
     explicit json_reverse_iterator(const base_iterator& it) noexcept : base_iterator(it) {}
 
     /// post-increment (it++)
-    json_reverse_iterator const operator++(int) // NOLINT(readability-const-return-type)
+    json_reverse_iterator operator++(int)& // NOLINT(cert-dcl21-cpp)
     {
         return static_cast<json_reverse_iterator>(base_iterator::operator++(1));
     }
@@ -12513,7 +12513,7 @@ class json_reverse_iterator : public std::reverse_iterator<Base>
     }
 
     /// post-decrement (it--)
-    json_reverse_iterator const operator--(int) // NOLINT(readability-const-return-type)
+    json_reverse_iterator operator--(int)& // NOLINT(cert-dcl21-cpp)
     {
         return static_cast<json_reverse_iterator>(base_iterator::operator--(1));
     }
@@ -17590,11 +17590,12 @@ template <class Key, class T, class IgnoredLess = std::less<Key>,
 
     // Explicit constructors instead of `using Container::Container`
     // otherwise older compilers choke on it (GCC <= 5.5, xcode <= 9.4)
-    ordered_map(const Allocator& alloc = Allocator()) : Container{alloc} {}
+    ordered_map() noexcept(noexcept(Container())) : Container{} {}
+    explicit ordered_map(const Allocator& alloc) noexcept(noexcept(Container(alloc))) : Container{alloc} {}
     template <class It>
     ordered_map(It first, It last, const Allocator& alloc = Allocator())
         : Container{first, last, alloc} {}
-    ordered_map(std::initializer_list<T> init, const Allocator& alloc = Allocator() )
+    ordered_map(std::initializer_list<value_type> init, const Allocator& alloc = Allocator() )
         : Container{init, alloc} {}
 
     std::pair<iterator, bool> emplace(const key_type& key, T&& t)
@@ -19576,6 +19577,7 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     template < typename ValueType, typename std::enable_if <
                    detail::conjunction <
                        detail::negation<std::is_pointer<ValueType>>,
+                       detail::negation<std::is_same<ValueType, std::nullptr_t>>,
                        detail::negation<std::is_same<ValueType, detail::json_ref<basic_json>>>,
                                         detail::negation<std::is_same<ValueType, typename string_t::value_type>>,
                                         detail::negation<detail::is_basic_json<ValueType>>,
