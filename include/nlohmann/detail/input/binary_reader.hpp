@@ -74,7 +74,7 @@ class binary_reader
 
     @param[in] adapter  input adapter to read from
     */
-    explicit binary_reader(InputAdapterType&& adapter) noexcept : ia(std::move(adapter))
+    explicit binary_reader(InputAdapterType&& adapter, const input_format_t format = input_format_t::json) noexcept : input_format(format), ia(std::move(adapter))
     {
         (void)detail::is_sax_static_asserts<SAX, BasicJsonType> {};
     }
@@ -101,10 +101,9 @@ class binary_reader
                    const cbor_tag_handler_t tag_handler = cbor_tag_handler_t::error)
     {
         sax = sax_;
-        input_format = format;
         bool result = false;
 
-        switch (input_format)
+        switch (format)
         {
             case input_format_t::bson:
                 result = parse_bson_internal();
@@ -2849,7 +2848,7 @@ class binary_reader
     const bool is_little_endian = little_endianness();
 
     /// input format
-    input_format_t input_format = input_format_t::json;
+    const input_format_t input_format = input_format_t::json;
 
     /// the SAX parser
     json_sax_t* sax = nullptr;
