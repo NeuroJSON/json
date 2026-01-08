@@ -174,6 +174,8 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     using cbor_tag_handler_t = detail::cbor_tag_handler_t;
     /// how to encode BJData
     using bjdata_version_t = detail::bjdata_version_t;
+    /// how to store structure-of-array defined in BJData Draft-4
+    using bjdata_soa_format_t = detail::bjdata_soa_format_t;
     /// helper type for initializer lists of basic_json values
     using initializer_list_t = std::initializer_list<detail::json_ref<basic_json>>;
 
@@ -4416,10 +4418,11 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     static std::vector<std::uint8_t> to_bjdata(const basic_json& j,
             const bool use_size = false,
             const bool use_type = false,
-            const bjdata_version_t version = bjdata_version_t::draft2)
+            const bjdata_version_t version = bjdata_version_t::draft2,
+            const bjdata_soa_format_t soa_format = bjdata_soa_format_t::none)
     {
         std::vector<std::uint8_t> result;
-        to_bjdata(j, result, use_size, use_type, version);
+        to_bjdata(j, result, use_size, use_type, version, soa_format);
         return result;
     }
 
@@ -4427,18 +4430,20 @@ class basic_json // NOLINT(cppcoreguidelines-special-member-functions,hicpp-spec
     /// @sa https://json.nlohmann.me/api/basic_json/to_bjdata/
     static void to_bjdata(const basic_json& j, detail::output_adapter<std::uint8_t> o,
                           const bool use_size = false, const bool use_type = false,
-                          const bjdata_version_t version = bjdata_version_t::draft2)
+                          const bjdata_version_t version = bjdata_version_t::draft2,
+                          const bjdata_soa_format_t soa_format = bjdata_soa_format_t::none)
     {
-        binary_writer<std::uint8_t>(o).write_ubjson(j, use_size, use_type, true, true, version);
+        binary_writer<std::uint8_t>(o).write_ubjson(j, use_size, use_type, true, true, version, soa_format);
     }
 
     /// @brief create a BJData serialization of a given JSON value
     /// @sa https://json.nlohmann.me/api/basic_json/to_bjdata/
     static void to_bjdata(const basic_json& j, detail::output_adapter<char> o,
                           const bool use_size = false, const bool use_type = false,
-                          const bjdata_version_t version = bjdata_version_t::draft2)
+                          const bjdata_version_t version = bjdata_version_t::draft2,
+                          const bjdata_soa_format_t soa_format = bjdata_soa_format_t::none)
     {
-        binary_writer<char>(o).write_ubjson(j, use_size, use_type, true, true, version);
+        binary_writer<char>(o).write_ubjson(j, use_size, use_type, true, true, version, soa_format);
     }
 
     /// @brief create a BSON serialization of a given JSON value

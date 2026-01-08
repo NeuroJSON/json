@@ -31,8 +31,18 @@ namespace detail
 /// how to encode BJData
 enum class bjdata_version_t
 {
-    draft2,
-    draft3,
+    draft2,  ///< BJData Draft 2
+    draft3,  ///< BJData Draft 3 (adds B-Byte marker)
+    draft4,  ///< BJData Draft 4 (adds SOA support)
+};
+
+
+/// BJData SOA encoding format
+enum class bjdata_soa_format_t
+{
+    none,        ///< no SOA encoding
+    row_major,   ///< row-major: [$
+    col_major    ///< column-major: {$
 };
 
 ///////////////////
@@ -746,7 +756,8 @@ class binary_writer
     */
     void write_ubjson(const BasicJsonType& j, const bool use_count,
                       const bool use_type, const bool add_prefix = true,
-                      const bool use_bjdata = false, const bjdata_version_t bjdata_version = bjdata_version_t::draft2)
+                      const bool use_bjdata = false, const bjdata_version_t bjdata_version = bjdata_version_t::draft2,
+                      const bjdata_soa_format_t soa_format = bjdata_soa_format_t::none)
     {
         const bool bjdata_draft3 = use_bjdata && bjdata_version == bjdata_version_t::draft3;
 
@@ -805,6 +816,17 @@ class binary_writer
 
             case value_t::array:
             {
+                if (use_bjdata && bjdata_version == bjdata_version_t::draft4
+                        && soa_format != bjdata_soa_format_t::none)
+                {
+                    std::vector<std::pair<string_t, std::int32_t>> schema;
+                    if (get_bjdata_soa_schema(j, schema))
+                    {
+                        write_bjdata_soa(j, schema, soa_format == bjdata_soa_format_t::row_major, use_bjdata);
+                        break;
+                    }
+                }
+
                 if (add_prefix)
                 {
                     oa->write_character(to_char_type('['));
@@ -839,7 +861,7 @@ class binary_writer
 
                 for (const auto& el : *j.m_data.m_value.array)
                 {
-                    write_ubjson(el, use_count, use_type, prefix_required, use_bjdata, bjdata_version);
+                    write_ubjson(el, use_count, use_type, prefix_required, use_bjdata, bjdata_version, soa_format);
                 }
 
                 if (!use_count)
@@ -941,7 +963,7 @@ class binary_writer
                     oa->write_characters(
                         reinterpret_cast<const CharType*>(el.first.c_str()),
                         el.first.size());
-                    write_ubjson(el.second, use_count, use_type, prefix_required, use_bjdata, bjdata_version);
+                    write_ubjson(el.second, use_count, use_type, prefix_required, use_bjdata, bjdata_version, soa_format);
                 }
 
                 if (!use_count)
@@ -1734,6 +1756,190 @@ class binary_writer
             }
         }
         return false;
+    }
+
+    /*!
+    @brief Validate and extract SOA schema from an array of uniform objects
+
+    Checks that all elements are objects with identical field names and
+    compatible fixed-length types.
+
+    @param[in] j  JSON array to analyze
+    @param[out] schema  extracted field names and type markers
+    @return true if array is suitable for SOA encoding, false otherwise
+    */
+    bool get_bjdata_soa_schema(const BasicJsonType& j,
+                               std::vector<std::pair<string_t, std::int32_t>>& schema) const
+    {
+        if (j.type() != value_t::array || j.empty())
+        {
+            return false;
+        }
+
+        const auto& arr = *j.m_data.m_value.array;
+
+        if (arr.front().type() != value_t::object || arr.front().empty())
+        {
+            return false;
+        }
+
+        schema.clear();
+
+        for (const auto& el : *arr.front().m_data.m_value.object)
+        {
+            std::int32_t t = 0;
+
+            switch (el.second.type())
+            {
+                case value_t::boolean:
+                    t = 0x54;  // 'T' - boolean type marker
+                    break;
+                case value_t::null:
+                    t = 0x5A;  // 'Z' - null type marker
+                    break;
+                case value_t::number_integer:
+                case value_t::number_unsigned:
+                case value_t::number_float:
+                    t = ubjson_prefix(el.second, true);
+                    break;
+                default:
+                    // String, array, object, binary types not supported in basic SOA
+                    return false;
+            }
+            schema.emplace_back(el.first, t);
+        }
+
+        for (std::size_t i = 1; i < arr.size(); ++i)
+        {
+            if (arr[i].type() != value_t::object)
+            {
+                return false;
+            }
+
+            if (arr[i].m_data.m_value.object->size() != schema.size())
+            {
+                return false;
+            }
+
+            std::size_t idx = 0;
+
+            for (const auto& el : *arr[i].m_data.m_value.object)
+            {
+                std::int32_t t = 0;
+
+                switch (el.second.type())
+                {
+                    case value_t::boolean:
+                        t = 0x54;
+                        break;
+                    case value_t::null:
+                        t = 0x5A;
+                        break;
+                    case value_t::number_integer:
+                    case value_t::number_unsigned:
+                    case value_t::number_float:
+                        t = ubjson_prefix(el.second, true);
+                        break;
+                    default:
+                        return false;
+                }
+
+                if (el.first != schema[idx].first || t != schema[idx].second)
+                {
+                    return false;
+                }
+
+                ++idx;
+            }
+        }
+        return true;
+    }
+
+    /*!
+    @brief Write BJData SOA (Structure-of-Arrays) format (Draft 4)
+
+    Writes packed object data in either row-major (interleaved) or
+    column-major (columnar) order.
+
+    @param[in] j  JSON array of objects to serialize
+    @param[in] schema  field names and type markers
+    @param[in] row_major  true for row-major, false for column-major
+    @param[in] use_bjdata  whether to use BJData extensions
+    */
+    void write_bjdata_soa(const BasicJsonType& j,
+                          const std::vector<std::pair<string_t, std::int32_t>>& schema,
+                          const bool row_major, const bool use_bjdata)
+    {
+        const auto& arr = *j.m_data.m_value.array;
+
+        // Write container marker: '[' for row-major, '{' for column-major
+        oa->write_character(row_major ? to_char_type(0x5B) : to_char_type(0x7B));
+
+        // Write optimized type marker '$' followed by schema start '{'
+        oa->write_character(to_char_type(0x24));  // '$'
+        oa->write_character(to_char_type(0x7B));  // '{'
+
+        // Write schema: field names followed by type markers (no values)
+        for (const auto& f : schema)
+        {
+            write_number_with_ubjson_prefix(f.first.size(), true, use_bjdata);
+            oa->write_characters(reinterpret_cast<const CharType*>(f.first.c_str()), f.first.size());
+            oa->write_character(to_char_type(f.second));
+        }
+
+        // Close schema and write count
+        oa->write_character(to_char_type(0x7D));  // '}' end schema
+        oa->write_character(to_char_type(0x23));  // '#' count marker
+        write_number_with_ubjson_prefix(arr.size(), true, use_bjdata);
+
+        // Lambda to write a single value without type marker
+        auto write_val = [this, use_bjdata](const BasicJsonType & v, std::int32_t t)
+        {
+            if (t == 0x54)  // Boolean: write T or F marker (1 byte)
+            {
+                oa->write_character(v.m_data.m_value.boolean ? to_char_type(0x54) : to_char_type(0x46));
+            }
+            else if (t == 0x5A)  // Null: write nothing (0 bytes)
+            {
+                // No payload for null type per Draft 4 spec
+            }
+            else if (v.type() == value_t::number_float)
+            {
+                write_number_with_ubjson_prefix(v.m_data.m_value.number_float, false, use_bjdata);
+            }
+            else if (v.type() == value_t::number_unsigned)
+            {
+                write_number_with_ubjson_prefix(v.m_data.m_value.number_unsigned, false, use_bjdata);
+            }
+            else
+            {
+                write_number_with_ubjson_prefix(v.m_data.m_value.number_integer, false, use_bjdata);
+            }
+        };
+
+        // Write payload in row-major or column-major order
+        if (row_major)
+        {
+            // Row-major: all fields of record 1, then all fields of record 2, etc.
+            for (const auto& rec : arr)
+            {
+                for (const auto& f : schema)
+                {
+                    write_val(rec.at(f.first), f.second);
+                }
+            }
+        }
+        else
+        {
+            // Column-major: all values of field 1, then all values of field 2, etc.
+            for (const auto& f : schema)
+            {
+                for (const auto& rec : arr)
+                {
+                    write_val(rec.at(f.first), f.second);
+                }
+            }
+        }
     }
 
     ///////////////////////

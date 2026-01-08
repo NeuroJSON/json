@@ -77,6 +77,17 @@ class binary_reader
     using char_type = typename InputAdapterType::char_type;
     using char_int_type = typename char_traits<char_type>::int_type;
 
+    /// SOA field definition for BJData Structure-of-Arrays (Draft 4)
+    struct soa_field_t
+    {
+        string_t name;
+        char_int_type type_marker = 0;
+        std::size_t fixed_length = 0;  ///< for 'S' and 'H' types
+    };
+
+    /// SOA schema
+    using soa_schema_t = std::vector<soa_field_t>;
+
   public:
     /*!
     @brief create a binary reader
@@ -2256,6 +2267,13 @@ class binary_reader
         if (current == '$')
         {
             result.second = get();  // must not ignore 'N', because 'N' maybe the type
+
+            // BJData Draft 4 SOA: if type is '{', this indicates SOA format
+            if (input_format == input_format_t::bjdata && result.second == '{')
+            {
+                return true;
+            }
+
             if (input_format == input_format_t::bjdata
                     && JSON_HEDLEY_UNLIKELY(std::binary_search(bjd_optimized_type_markers.begin(), bjd_optimized_type_markers.end(), result.second)))
             {
@@ -2513,6 +2531,12 @@ class binary_reader
             return false;
         }
 
+        // BJData Draft 4 SOA: type '{' indicates row-major SOA
+        if (input_format == input_format_t::bjdata && size_and_type.second == '{')
+        {
+            return parse_bjdata_soa(true);
+        }
+
         // if bit-8 of size_and_type.second is set to 1, encode bjdata ndarray as an object in JData annotated array format (https://github.com/NeuroJSON/jdata):
         // {"_ArrayType_" : "typeid", "_ArraySize_" : [n1, n2, ...], "_ArrayData_" : [v1, v2, ...]}
 
@@ -2628,6 +2652,12 @@ class binary_reader
             return false;
         }
 
+        // BJData Draft 4 SOA: type '{' indicates column-major SOA
+        if (input_format == input_format_t::bjdata && size_and_type.second == '{')
+        {
+            return parse_bjdata_soa(false);
+        }
+
         // do not accept ND-array size in objects in BJData
         if (input_format == input_format_t::bjdata && size_and_type.first != npos && (size_and_type.second & (1 << 8)) != 0)
         {
@@ -2700,7 +2730,204 @@ class binary_reader
         return sax->end_object();
     }
 
-    // Note, no reader for UBJSON binary types is implemented because they do
+    /*!
+    @brief Parse BJData Structure-of-Arrays (SOA) format (Draft 4)
+
+    SOA format allows storing packed object data in either row-major or
+    column-major order for efficient binary serialization.
+
+    Syntax: [$  {<schema>}  #<count>  <payload>    // row-major
+            {$  {<schema>}  #<count>  <payload>    // column-major
+
+    @param[in] is_row_major  true for row-major (interleaved), false for column-major
+    @return whether parsing completed successfully
+    */
+
+    bool parse_bjdata_soa(const bool is_row_major)
+    {
+        soa_schema_t schema;
+
+        // Parse schema: payload-less object defining record structure
+        while (true)
+        {
+            get();
+            if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA schema")))
+            {
+                return false;
+            }
+
+            // End of schema '}'
+            if (current == 0x7D)
+            {
+                break;
+            }
+
+            // Skip no-op markers 'N'
+            if (current == 0x4E)
+            {
+                continue;
+            }
+
+            // Read field name length and name
+            soa_field_t field;
+            std::size_t key_len = 0;
+            bool no_ndarray = true;
+
+            // Read field name length and name
+            if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(key_len, no_ndarray, current) ||
+                                     !get_string(input_format, key_len, field.name)))
+            {
+                return false;
+            }
+
+            // Read field type marker
+            get();
+            if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA type")))
+            {
+                return false;
+            }
+
+            field.type_marker = current;
+
+            // Handle fixed-length string 'S' and high-precision 'H' types
+            if (current == 0x53 || current == 0x48)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(field.fixed_length, no_ndarray)))
+                {
+                    return false;
+                }
+            }
+
+            schema.push_back(std::move(field));
+        }
+
+        // Expect '#' count marker
+        get();
+        if (JSON_HEDLEY_UNLIKELY(current != 0x23))
+        {
+            return sax->parse_error(chars_read, get_token_string(),
+                                    parse_error::create(113, chars_read,
+                                            exception_message(input_format, "expected '#' after SOA schema", "SOA"), nullptr));
+        }
+
+        // Read record count
+        std::size_t count = 0;
+        bool no_ndarray = true;
+        if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(count, no_ndarray)))
+        {
+            return false;
+        }
+
+        if (is_row_major)
+        {
+            // Row-major: array of objects (interleaved)
+            // Output: [{field1:val1, field2:val2}, {field1:val3, field2:val4}, ...]
+            if (JSON_HEDLEY_UNLIKELY(!sax->start_array(count)))
+            {
+                return false;
+            }
+
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!sax->start_object(schema.size())))
+                {
+                    return false;
+                }
+
+                for (const auto& f : schema)
+                {
+                    string_t key = f.name;  // mutable copy for sax->key()
+                    if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !get_bjdata_soa_value(f)))
+                    {
+                        return false;
+                    }
+                }
+
+                if (JSON_HEDLEY_UNLIKELY(!sax->end_object()))
+                {
+                    return false;
+                }
+            }
+
+            return sax->end_array();
+        }
+
+        // Column-major: object of arrays (columnar)
+        // Output: {field1:[val1,val3,...], field2:[val2,val4,...]}
+        if (JSON_HEDLEY_UNLIKELY(!sax->start_object(schema.size())))
+        {
+            return false;
+        }
+
+        for (const auto& f : schema)
+        {
+            string_t key = f.name;  // mutable copy for sax->key()
+            if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !sax->start_array(count)))
+            {
+                return false;
+            }
+
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!get_bjdata_soa_value(f)))
+                {
+                    return false;
+                }
+            }
+
+            if (JSON_HEDLEY_UNLIKELY(!sax->end_array()))
+            {
+                return false;
+            }
+        }
+
+        return sax->end_object();
+    }
+
+    /*!
+    @brief Read a single SOA field value based on its type marker
+
+    @param[in] f  field definition containing type marker and optional fixed length
+    @return whether value reading completed successfully
+    */
+    bool get_bjdata_soa_value(const soa_field_t& f)
+    {
+        // Boolean type 'T': 1 byte payload (T or F marker)
+        if (f.type_marker == 0x54)
+        {
+            get();
+            if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA bool")))
+            {
+                return false;
+            }
+            return sax->boolean(current == 0x54);  // T=true, F=false
+        }
+
+        // Null type 'Z': 0 bytes in payload
+        if (f.type_marker == 0x5A)
+        {
+            return sax->null();
+        }
+
+        // Fixed-length string 'S' or high-precision number 'H'
+        if (f.type_marker == 0x53 || f.type_marker == 0x48)
+        {
+            string_t s;
+            if (JSON_HEDLEY_UNLIKELY(!get_string(input_format, f.fixed_length, s)))
+            {
+                return false;
+            }
+            // Remove trailing null padding for strings
+            while (!s.empty() && s.back() == 0x00)
+            {
+                s.pop_back();
+            }
+            return sax->string(s);
+        }
+
+        // All other types: use standard UBJSON value parsing
+        return get_ubjson_value(f.type_marker);
+    }    // Note, no reader for UBJSON binary types is implemented because they do
     // not exist
 
     bool get_ubjson_high_precision_number()
@@ -3040,7 +3267,7 @@ class binary_reader
 
     // excluded markers in bjdata optimized type
 #define JSON_BINARY_READER_MAKE_BJD_OPTIMIZED_TYPE_MARKERS_ \
-    make_array<char_int_type>('F', 'H', 'N', 'S', 'T', 'Z', '[', '{')
+    make_array<char_int_type>('F', 'H', 'N', 'S', 'T', 'Z', '[')
 
 #define JSON_BINARY_READER_MAKE_BJD_TYPES_MAP_ \
     make_array<bjd_type>(                      \

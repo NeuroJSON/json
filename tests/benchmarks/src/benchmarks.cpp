@@ -11,7 +11,8 @@
 #include <fstream>
 #include <numeric>
 #include <vector>
-#include <test_data.hpp>
+#define TEST_DATA_DIRECTORY "/home/fangq/space/git/Temp/json/build/test_files"
+//#include <test_data.hpp>
 
 using json = nlohmann::json;
 

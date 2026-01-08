@@ -3836,3 +3836,969 @@ TEST_CASE("BJData roundtrips" * doctest::skip())
         }
     }
 }
+
+// Unit tests for BJData Structure-of-Arrays (SOA) feature (Draft 4)
+// Add these tests to unit-bjdata.cpp
+
+TEST_CASE("BJData SOA (Structure-of-Arrays)")
+{
+    SECTION("Writer: SOA encoding")
+    {
+        SECTION("row-major format basic test")
+        {
+            // Array of objects with uniform numeric fields
+            json const j = json::array(
+            {
+                {{"x", 1}, {"y", 2}},
+                {{"x", 3}, {"y", 4}},
+                {{"x", 5}, {"y", 6}}
+            });
+
+            // Encode with Draft 4 and row-major SOA
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result.size() > 0);
+            CHECK(result[0] == '[');  // Array marker
+            CHECK(result[1] == '$');  // Optimized type marker
+            CHECK(result[2] == '{');  // Schema start
+
+            // Verify roundtrip produces equivalent data
+            const auto decoded = json::from_bjdata(result);
+            CHECK(decoded.is_array());
+            CHECK(decoded.size() == 3);
+        }
+
+        SECTION("column-major format basic test")
+        {
+            json const j = json::array(
+            {
+                {{"a", 10}, {"b", 20}},
+                {{"a", 30}, {"b", 40}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::col_major);
+
+            CHECK(result.size() > 0);
+            CHECK(result[0] == '{');  // Object marker for column-major
+            CHECK(result[1] == '$');  // Optimized type marker
+            CHECK(result[2] == '{');  // Schema start
+
+            const auto decoded = json::from_bjdata(result);
+            CHECK(decoded.is_object());
+        }
+
+        SECTION("SOA with boolean fields")
+        {
+            json const j = json::array(
+            {
+                {{"flag", true}, {"val", 1}},
+                {{"flag", false}, {"val", 2}},
+                {{"flag", true}, {"val", 3}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result.size() > 0);
+            const auto decoded = json::from_bjdata(result);
+            CHECK(decoded.is_array());
+            CHECK(decoded.size() == 3);
+        }
+
+        SECTION("SOA with null fields")
+        {
+            json const j = json::array(
+            {
+                {{"id", 1}, {"opt", nullptr}},
+                {{"id", 2}, {"opt", nullptr}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result.size() > 0);
+            const auto decoded = json::from_bjdata(result);
+            CHECK(decoded.is_array());
+        }
+
+        SECTION("SOA with float fields")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1.5}, {"y", 2.5}},
+                {{"x", 3.5}, {"y", 4.5}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result.size() > 0);
+            const auto decoded = json::from_bjdata(result);
+            CHECK(decoded.is_array());
+            CHECK(decoded.size() == 2);
+        }
+
+        SECTION("SOA disabled - falls back to normal encoding")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1}, {"y", 2}},
+                {{"x", 3}, {"y", 4}}
+            });
+
+            const auto result_none = json::to_bjdata(j, true, true,
+                                     json::bjdata_version_t::draft4, json::bjdata_soa_format_t::none);
+
+            CHECK(result_none[0] == '[');
+            CHECK((result_none[1] != '$' || result_none[2] != '{'));
+        }
+
+        SECTION("SOA not applicable - non-uniform objects")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1}, {"y", 2}},
+                {{"a", 3}, {"b", 4}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+
+        SECTION("SOA not applicable - mixed types in same field")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1}, {"y", 2}},
+                {{"x", "str"}, {"y", 4}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+
+        SECTION("SOA not applicable - nested objects")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1}, {"nested", {{"a", 1}}}},
+                {{"x", 2}, {"nested", {{"a", 2}}}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+
+        SECTION("SOA not applicable - array fields")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1}, {"arr", {1, 2, 3}}},
+                {{"x", 2}, {"arr", {4, 5, 6}}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+
+        SECTION("SOA not applicable - empty array")
+        {
+            json const j = json::array();
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result == std::vector<uint8_t> {'[', '#', 'i', 0});
+        }
+
+        SECTION("SOA not applicable - array of non-objects")
+        {
+            json const j = json::array({1, 2, 3, 4, 5});
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+            CHECK(result[1] == '$');
+            CHECK(result[2] == 'i');
+        }
+
+        SECTION("SOA with single record")
+        {
+            json const j = json::array({{{"x", 42}, {"y", 100}}});
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result.size() > 0);
+            const auto decoded = json::from_bjdata(result);
+            CHECK(decoded.is_array());
+            CHECK(decoded.size() == 1);
+        }
+
+        SECTION("Draft 2/3 ignores SOA format")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1}, {"y", 2}},
+                {{"x", 3}, {"y", 4}}
+            });
+
+            const auto result_d2 = json::to_bjdata(j, true, true,
+                                                   json::bjdata_version_t::draft2, json::bjdata_soa_format_t::row_major);
+
+            const auto result_d3 = json::to_bjdata(j, true, true,
+                                                   json::bjdata_version_t::draft3, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result_d2[0] == '[');
+            CHECK(result_d3[0] == '[');
+        }
+    }
+
+    SECTION("Reader: SOA parsing")
+    {
+        SECTION("row-major SOA decoding")
+        {
+            std::vector<uint8_t> const v_row =
+            {
+                '[', '$', '{',
+                'i', 1, 'x', 'i',
+                'i', 1, 'y', 'i',
+                '}',
+                '#', 'i', 2,
+                1, 2,
+                3, 4
+            };
+
+            const auto j = json::from_bjdata(v_row);
+            CHECK(j.is_array());
+            CHECK(j.size() == 2);
+            CHECK(j[0]["x"] == 1);
+            CHECK(j[0]["y"] == 2);
+            CHECK(j[1]["x"] == 3);
+            CHECK(j[1]["y"] == 4);
+        }
+
+        SECTION("column-major SOA decoding")
+        {
+            std::vector<uint8_t> const v_col =
+            {
+                '{', '$', '{',
+                'i', 1, 'x', 'i',
+                'i', 1, 'y', 'i',
+                '}',
+                '#', 'i', 2,
+                1, 3,
+                2, 4
+            };
+
+            const auto j = json::from_bjdata(v_col);
+            CHECK(j.is_object());
+            CHECK(j.contains("x"));
+            CHECK(j.contains("y"));
+            CHECK(j["x"] == json::array({1, 3}));
+            CHECK(j["y"] == json::array({2, 4}));
+        }
+
+        SECTION("SOA with boolean type marker")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 4, 'f', 'l', 'a', 'g', 'T',
+                '}',
+                '#', 'i', 3,
+                'T', 'F', 'T'
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 3);
+            CHECK(j[0]["flag"] == true);
+            CHECK(j[1]["flag"] == false);
+            CHECK(j[2]["flag"] == true);
+        }
+
+        SECTION("SOA with null type marker")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 3, 'o', 'p', 't', 'Z',
+                '}',
+                '#', 'i', 2
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 2);
+            CHECK(j[0]["opt"].is_null());
+            CHECK(j[1]["opt"].is_null());
+        }
+
+        SECTION("SOA with uint8 type")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'v', 'U',
+                '}',
+                '#', 'i', 3,
+                0xFF, 0x80, 0x00
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 3);
+            CHECK(j[0]["v"] == 255);
+            CHECK(j[1]["v"] == 128);
+            CHECK(j[2]["v"] == 0);
+        }
+
+        SECTION("SOA with int16 type")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'n', 'I',
+                '}',
+                '#', 'i', 2,
+                0x01, 0x00,
+                0xFF, 0x7F
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 2);
+            CHECK(j[0]["n"] == 1);
+            CHECK(j[1]["n"] == 32767);
+        }
+
+        SECTION("SOA with float32 type")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'f', 'd',
+                '}',
+                '#', 'i', 2,
+                0x00, 0x00, 0x80, 0x3F,
+                0x00, 0x00, 0x00, 0x40
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 2);
+            CHECK(j[0]["f"] == 1.0f);
+            CHECK(j[1]["f"] == 2.0f);
+        }
+
+        SECTION("SOA with float64 type")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'd', 'D',
+                '}',
+                '#', 'i', 1,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 1);
+            CHECK(j[0]["d"] == 1.0);
+        }
+
+        SECTION("SOA with multiple fields")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 4, 'f', 'l', 'a', 'g', 'T',
+                'i', 2, 'i', 'd', 'i',
+                'i', 5, 'v', 'a', 'l', 'u', 'e', 'U',
+                '}',
+                '#', 'i', 2,
+                'T', 1, 10,
+                'F', 2, 20
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 2);
+            CHECK(j[0]["flag"] == true);
+            CHECK(j[0]["id"] == 1);
+            CHECK(j[0]["value"] == 10);
+            CHECK(j[1]["flag"] == false);
+            CHECK(j[1]["id"] == 2);
+            CHECK(j[1]["value"] == 20);
+        }
+
+        SECTION("SOA with empty count")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'x', 'i',
+                '}',
+                '#', 'i', 0
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.empty());
+        }
+
+        SECTION("SOA with no-op markers in schema")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'N',
+                'i', 1, 'x', 'i',
+                'N', 'N',
+                'i', 1, 'y', 'i',
+                '}',
+                '#', 'i', 1,
+                5, 10
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j.is_array());
+            CHECK(j.size() == 1);
+            CHECK(j[0]["x"] == 5);
+            CHECK(j[0]["y"] == 10);
+        }
+    }
+
+    SECTION("SOA parse errors")
+    {
+        SECTION("unexpected EOF in schema")
+        {
+            std::vector<uint8_t> const v = {'[', '$', '{'};
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+
+        SECTION("missing count marker after schema")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'x', 'i',
+                '}',
+                'i', 2
+            };
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+
+        SECTION("EOF in field name length")
+        {
+            std::vector<uint8_t> const v = {'[', '$', '{', 'i'};
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+
+        SECTION("EOF in field name")
+        {
+            std::vector<uint8_t> const v = {'[', '$', '{', 'i', 5, 'a', 'b'};
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+
+        SECTION("EOF in field type marker")
+        {
+            std::vector<uint8_t> const v = {'[', '$', '{', 'i', 1, 'x'};
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+
+        SECTION("EOF in SOA boolean payload")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'f', 'T',
+                '}',
+                '#', 'i', 2,
+                'T'
+            };
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+
+        SECTION("EOF in SOA numeric payload")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'n', 'I',
+                '}',
+                '#', 'i', 2,
+                0x01, 0x00
+            };
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+
+        SECTION("EOF in count value")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'x', 'i',
+                '}',
+                '#', 'i'
+            };
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+            CHECK(json::from_bjdata(v, true, false).is_discarded());
+        }
+    }
+
+    SECTION("SOA roundtrip tests")
+    {
+        SECTION("row-major roundtrip")
+        {
+            json const original = json::array(
+            {
+                {{"a", 1}, {"b", 2}, {"c", 3}},
+                {{"a", 4}, {"b", 5}, {"c", 6}},
+                {{"a", 7}, {"b", 8}, {"c", 9}}
+            });
+
+            const auto encoded = json::to_bjdata(original, true, true,
+                                                 json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            const auto decoded = json::from_bjdata(encoded);
+
+            CHECK(decoded.is_array());
+            CHECK(decoded.size() == original.size());
+            for (size_t i = 0; i < original.size(); ++i)
+            {
+                CHECK(decoded[i]["a"] == original[i]["a"]);
+                CHECK(decoded[i]["b"] == original[i]["b"]);
+                CHECK(decoded[i]["c"] == original[i]["c"]);
+            }
+        }
+
+        SECTION("column-major roundtrip")
+        {
+            json const original = json::array(
+            {
+                {{"x", 10}, {"y", 20}},
+                {{"x", 30}, {"y", 40}},
+                {{"x", 50}, {"y", 60}}
+            });
+
+            const auto encoded = json::to_bjdata(original, true, true,
+                                                 json::bjdata_version_t::draft4, json::bjdata_soa_format_t::col_major);
+
+            const auto decoded = json::from_bjdata(encoded);
+
+            CHECK(decoded.is_object());
+            CHECK(decoded["x"] == json::array({10, 30, 50}));
+            CHECK(decoded["y"] == json::array({20, 40, 60}));
+        }
+
+        SECTION("roundtrip with mixed numeric types")
+        {
+            json const original = json::array(
+            {
+                {{"small", 1}, {"medium", 1000}, {"large", 100000}},
+                {{"small", 2}, {"medium", 2000}, {"large", 200000}}
+            });
+
+            const auto encoded = json::to_bjdata(original, true, true,
+                                                 json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            const auto decoded = json::from_bjdata(encoded);
+
+            CHECK(decoded.is_array());
+            CHECK(decoded.size() == 2);
+            CHECK(decoded[0]["small"] == 1);
+            CHECK(decoded[0]["medium"] == 1000);
+            CHECK(decoded[0]["large"] == 100000);
+        }
+
+        SECTION("roundtrip with boolean and null")
+        {
+            json const original = json::array(
+            {
+                {{"active", true}, {"data", nullptr}},
+                {{"active", false}, {"data", nullptr}}
+            });
+
+            const auto encoded = json::to_bjdata(original, true, true,
+                                                 json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            const auto decoded = json::from_bjdata(encoded);
+
+            CHECK(decoded.is_array());
+            CHECK(decoded[0]["active"] == true);
+            CHECK(decoded[0]["data"].is_null());
+            CHECK(decoded[1]["active"] == false);
+            CHECK(decoded[1]["data"].is_null());
+        }
+    }
+
+    SECTION("SOA SAX parser aborts")
+    {
+        SECTION("abort on start_array for row-major")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'i', 2, 1, 2
+            };
+
+            SaxCountdown scp(0);
+            CHECK_FALSE(json::sax_parse(v, &scp, json::input_format_t::bjdata));
+        }
+
+        SECTION("abort on start_object for column-major")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '{', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'i', 2, 1, 2
+            };
+
+            SaxCountdown scp(0);
+            CHECK_FALSE(json::sax_parse(v, &scp, json::input_format_t::bjdata));
+        }
+
+        SECTION("abort on key in row-major object")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'i', 1, 5
+            };
+
+            SaxCountdown scp(2);
+            CHECK_FALSE(json::sax_parse(v, &scp, json::input_format_t::bjdata));
+        }
+
+        SECTION("abort on value in row-major")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'i', 1, 42
+            };
+
+            SaxCountdown scp(3);
+            CHECK_FALSE(json::sax_parse(v, &scp, json::input_format_t::bjdata));
+        }
+    }
+
+    SECTION("SOA with all numeric types")
+    {
+        SECTION("int8 (i)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'i', '}', '#', 'i', 3,
+                0x7F, 0x00, 0x80
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 127);
+            CHECK(j[1]["v"] == 0);
+            CHECK(j[2]["v"] == -128);
+        }
+
+        SECTION("uint8 (U)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'U', '}', '#', 'i', 2,
+                0x00, 0xFF
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 0);
+            CHECK(j[1]["v"] == 255);
+        }
+
+        SECTION("int16 (I)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'I', '}', '#', 'i', 2,
+                0xFF, 0x7F, 0x00, 0x80
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 32767);
+            CHECK(j[1]["v"] == -32768);
+        }
+
+        SECTION("uint16 (u)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'u', '}', '#', 'i', 2,
+                0x00, 0x00, 0xFF, 0xFF
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 0);
+            CHECK(j[1]["v"] == 65535);
+        }
+
+        SECTION("int32 (l)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'l', '}', '#', 'i', 1,
+                0xFF, 0xFF, 0xFF, 0x7F
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 2147483647);
+        }
+
+        SECTION("uint32 (m)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'm', '}', '#', 'i', 1,
+                0xFF, 0xFF, 0xFF, 0xFF
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 4294967295u);
+        }
+
+        SECTION("int64 (L)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'L', '}', '#', 'i', 1,
+                0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 4294967296);
+        }
+
+        SECTION("uint64 (M)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'M', '}', '#', 'i', 1,
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == 9223372036854775807ull);
+        }
+
+        SECTION("float32 (d)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'd', '}', '#', 'i', 1,
+                0xd0, 0x0f, 0x49, 0x40
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == doctest::Approx(3.14159f));
+        }
+
+        SECTION("float64 (D)")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'v', 'D', '}', '#', 'i', 1,
+                0x6e, 0x86, 0x1b, 0xf0, 0xf9, 0x21, 0x09, 0x40
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["v"] == doctest::Approx(3.14159));
+        }
+    }
+
+    SECTION("SOA schema validation in writer")
+    {
+        SECTION("validates uniform field names")
+        {
+            json const j = json::array({{{"x", 1}}, {{"y", 2}}});
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+            CHECK(!(result[1] == '$' && result[2] == '{'));
+        }
+
+        SECTION("validates uniform field count")
+        {
+            json const j = json::array(
+            {
+                {{"x", 1}, {"y", 2}},
+                {{"x", 3}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+
+        SECTION("validates uniform types")
+        {
+            json const j = json::array({{{"x", 1}}, {{"x", 1.5}}});
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+
+        SECTION("rejects string fields in basic SOA")
+        {
+            json const j = json::array(
+            {
+                {{"name", "alice"}},
+                {{"name", "bob"}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+
+        SECTION("rejects binary fields in basic SOA")
+        {
+            json const j = json::array(
+            {
+                {{"data", json::binary({1, 2, 3})}},
+                {{"data", json::binary({4, 5, 6})}}
+            });
+
+            const auto result = json::to_bjdata(j, true, true,
+                                                json::bjdata_version_t::draft4, json::bjdata_soa_format_t::row_major);
+
+            CHECK(result[0] == '[');
+        }
+    }
+
+    SECTION("SOA with various count sizes")
+    {
+        SECTION("count fits in uint8")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'U', 200
+            };
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+        }
+
+        SECTION("count fits in int16")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'I', 0x00, 0x01
+            };
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
+        }
+    }
+
+    SECTION("SOA integration with strict mode")
+    {
+        SECTION("strict mode enforces no trailing data")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'i', 1, 42, 'Z'
+            };
+
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v, true, true), json::parse_error);
+        }
+
+        SECTION("non-strict mode allows trailing data")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{', 'i', 1, 'x', 'i', '}', '#', 'i', 1, 42, 'Z'
+            };
+
+            const auto j = json::from_bjdata(v, false);
+            CHECK(j.is_array());
+            CHECK(j.size() == 1);
+            CHECK(j[0]["x"] == 42);
+        }
+    }
+
+    SECTION("SOA field ordering")
+    {
+        SECTION("field order preserved in row-major")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '[', '$', '{',
+                'i', 1, 'a', 'i',
+                'i', 1, 'b', 'i',
+                'i', 1, 'c', 'i',
+                '}',
+                '#', 'i', 1,
+                1, 2, 3
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j[0]["a"] == 1);
+            CHECK(j[0]["b"] == 2);
+            CHECK(j[0]["c"] == 3);
+        }
+
+        SECTION("field order preserved in column-major")
+        {
+            std::vector<uint8_t> const v =
+            {
+                '{', '$', '{',
+                'i', 1, 'x', 'i',
+                'i', 1, 'y', 'i',
+                '}',
+                '#', 'i', 2,
+                1, 3,
+                2, 4
+            };
+
+            const auto j = json::from_bjdata(v);
+            CHECK(j["x"] == json::array({1, 3}));
+            CHECK(j["y"] == json::array({2, 4}));
+        }
+    }
+}
