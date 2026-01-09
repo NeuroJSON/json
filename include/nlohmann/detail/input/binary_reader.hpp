@@ -20,10 +20,11 @@
 #include <string> // char_traits, string
 #include <utility> // make_pair, move
 #include <vector> // vector
+#include <map> // map
 #ifdef __cpp_lib_byteswap
     #include <bit>  //byteswap
 #endif
-
+#include <iostream>
 #include <nlohmann/detail/exceptions.hpp>
 #include <nlohmann/detail/input/input_adapters.hpp>
 #include <nlohmann/detail/input/json_sax.hpp>
@@ -76,6 +77,32 @@ class binary_reader
     using json_sax_t = SAX;
     using char_type = typename InputAdapterType::char_type;
     using char_int_type = typename char_traits<char_type>::int_type;
+
+
+    /// String encoding type for SOA fields
+    enum class soa_string_encoding_t
+    {
+        none,    ///< not a string field
+        fixed,   ///< fixed-length: S<int><len>
+        dict,    ///< dictionary: [$S#count strings...]
+        offset   ///< offset table: [$<int_type>]
+    };
+
+    /// SOA field definition for BJData Structure-of-Arrays (Draft 4)
+    struct soa_field_t
+    {
+        string_t name;
+        char_int_type type_marker = 0;
+        std::size_t fixed_length = 0;  ///< for 'S' and 'H' types
+
+        // Variable-length string support
+        soa_string_encoding_t str_encoding = soa_string_encoding_t::none;
+        std::vector<string_t> str_dict;      ///< dictionary for dict encoding
+        std::size_t str_index_size = 0;      ///< byte size of index (1, 2, or 4)
+    };
+
+    /// SOA schema
+    using soa_schema_t = std::vector<soa_field_t>;
 
   public:
     /*!
@@ -2256,6 +2283,13 @@ class binary_reader
         if (current == '$')
         {
             result.second = get();  // must not ignore 'N', because 'N' maybe the type
+
+            // BJData Draft 4 SOA: if type is '{', this indicates SOA format
+            if (input_format == input_format_t::bjdata && result.second == '{')
+            {
+                return true;
+            }
+
             if (input_format == input_format_t::bjdata
                     && JSON_HEDLEY_UNLIKELY(std::binary_search(bjd_optimized_type_markers.begin(), bjd_optimized_type_markers.end(), result.second)))
             {
@@ -2463,7 +2497,7 @@ class binary_reader
 
             case 'H':
             {
-                return get_ubjson_high_precision_number();
+                return this->get_ubjson_high_precision_number();
             }
 
             case 'C':  // char
@@ -2511,6 +2545,12 @@ class binary_reader
         if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_type(size_and_type)))
         {
             return false;
+        }
+
+        // BJData Draft 4 SOA: type '{' indicates row-major SOA
+        if (input_format == input_format_t::bjdata && size_and_type.second == '{')
+        {
+            return parse_bjdata_soa(true);
         }
 
         // if bit-8 of size_and_type.second is set to 1, encode bjdata ndarray as an object in JData annotated array format (https://github.com/NeuroJSON/jdata):
@@ -2628,6 +2668,12 @@ class binary_reader
             return false;
         }
 
+        // BJData Draft 4 SOA: type '{' indicates column-major SOA
+        if (input_format == input_format_t::bjdata && size_and_type.second == '{')
+        {
+            return parse_bjdata_soa(false);
+        }
+
         // do not accept ND-array size in objects in BJData
         if (input_format == input_format_t::bjdata && size_and_type.first != npos && (size_and_type.second & (1 << 8)) != 0)
         {
@@ -2700,7 +2746,853 @@ class binary_reader
         return sax->end_object();
     }
 
-    // Note, no reader for UBJSON binary types is implemented because they do
+    ///////////////////////////////////////////////
+    // BJData Structure-of-Arrays (SOA) - Draft 4
+    ///////////////////////////////////////////////
+
+    /*!
+    @brief Read little-endian index value of specified byte size for SOA
+    */
+    bool read_soa_index(std::size_t size, std::size_t& result)
+    {
+        result = 0;
+        switch (size)
+        {
+            case 1:
+            {
+                std::uint8_t v{};
+                if (!get_number<std::uint8_t, true>(input_format, v))
+                {
+                    return false;
+                }
+                result = v;
+                return true;
+            }
+            case 2:
+            {
+                std::uint16_t v{};
+                if (!get_number<std::uint16_t, true>(input_format, v))
+                {
+                    return false;
+                }
+                result = v;
+                return true;
+            }
+            case 4:
+            {
+                std::uint32_t v{};
+                if (!get_number<std::uint32_t, true>(input_format, v))
+                {
+                    return false;
+                }
+                result = v;
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    /*!
+    @brief Get index byte size from type marker for SOA
+    */
+    static constexpr std::size_t soa_index_size(char_int_type m) noexcept
+    {
+        return (m == 'U' || m == 'i' || m == 'B') ? 1 :
+               (m == 'u' || m == 'I') ? 2 :
+               (m == 'm' || m == 'l') ? 4 : 0;
+    }
+
+    /*!
+    @brief Read single SOA field value (streaming, no offset strings)
+    */
+    bool get_bjdata_soa_value_ex(const soa_field_t& f)
+    {
+        if (f.type_marker == 0x54)
+        {
+            get();
+            if (!unexpect_eof(input_format, "SOA bool"))
+            {
+                return false;
+            }
+            return sax->boolean(current == 0x54);
+        }
+
+        if (f.type_marker == 0x5A)
+        {
+            return sax->null();
+        }
+
+        if (f.type_marker == 0x53)
+        {
+            if (f.str_encoding == soa_string_encoding_t::fixed)
+            {
+                string_t s;
+                if (!get_string(input_format, f.fixed_length, s))
+                {
+                    return false;
+                }
+                while (!s.empty() && s.back() == 0x00)
+                {
+                    s.pop_back();
+                }
+                return sax->string(s);
+            }
+            if (f.str_encoding == soa_string_encoding_t::dict)
+            {
+                std::size_t idx = 0;
+                if (!read_soa_index(f.str_index_size, idx))
+                {
+                    return false;
+                }
+                if (idx >= f.str_dict.size())
+                    return sax->parse_error(chars_read, get_token_string(),
+                                            parse_error::create(113, chars_read,
+                                                    exception_message(input_format, "dict index out of range", "SOA"), nullptr));
+                string_t str = f.str_dict[idx];
+                return sax->string(str);
+            }
+            return false;  // offset handled in buffered path
+        }
+
+        if (f.type_marker == 0x48)
+        {
+            string_t s;
+            if (!get_string(input_format, f.fixed_length, s))
+            {
+                return false;
+            }
+            while (!s.empty() && s.back() == 0x00)
+            {
+                s.pop_back();
+            }
+
+            std::vector<char> nv(s.begin(), s.end());
+            using ia_t = decltype(detail::input_adapter(nv));
+            auto lex = detail::lexer<BasicJsonType, ia_t>(detail::input_adapter(nv), false);
+            const auto tok = lex.scan();
+            using tt = typename detail::lexer_base<BasicJsonType>::token_type;
+            switch (tok)
+            {
+                case tt::value_integer:
+                    return sax->number_integer(lex.get_number_integer());
+                case tt::value_unsigned:
+                    return sax->number_unsigned(lex.get_number_unsigned());
+                case tt::value_float:
+                    return sax->number_float(lex.get_number_float(), lex.get_token_string());
+                default:
+                    return sax->string(s);
+            }
+        }
+
+        return get_ubjson_value(f.type_marker);
+    }
+
+    /*!
+    @brief Emit SOA data via streaming (no offset strings)
+    */
+    bool emit_soa_streaming(const soa_schema_t& schema, std::size_t count, bool is_row_major)
+    {
+        if (is_row_major)
+        {
+            if (JSON_HEDLEY_UNLIKELY(!sax->start_array(count)))
+            {
+                return false;
+            }
+
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!sax->start_object(schema.size())))
+                {
+                    return false;
+                }
+                for (const auto& f : schema)
+                {
+                    string_t key = f.name;
+                    if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !get_bjdata_soa_value_ex(f)))
+                    {
+                        return false;
+                    }
+                }
+                if (JSON_HEDLEY_UNLIKELY(!sax->end_object()))
+                {
+                    return false;
+                }
+            }
+            return sax->end_array();
+        }
+
+        // Column-major
+        if (JSON_HEDLEY_UNLIKELY(!sax->start_object(schema.size())))
+        {
+            return false;
+        }
+        for (const auto& f : schema)
+        {
+            string_t key = f.name;
+            if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !sax->start_array(count)))
+            {
+                return false;
+            }
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!get_bjdata_soa_value_ex(f)))
+                {
+                    return false;
+                }
+            }
+            if (JSON_HEDLEY_UNLIKELY(!sax->end_array()))
+            {
+                return false;
+            }
+        }
+        return sax->end_object();
+    }
+
+    /*!
+    @brief Parse SOA with offset-encoded strings (buffered)
+    */
+    bool parse_bjdata_soa_buffered(const soa_schema_t& schema, std::size_t count, bool is_row_major)
+    {
+        const std::size_t nf = schema.size();
+
+        struct field_data_t
+        {
+            std::vector<string_t> strings;
+            std::vector<bool> bools;
+            std::vector<std::int64_t> integers;
+            std::vector<std::uint64_t> unsigneds;
+            std::vector<double> floats;
+        };
+
+        std::vector<field_data_t> field_data(nf);
+        std::vector<bool> is_offset_field(nf, false);
+
+        for (std::size_t fi = 0; fi < nf; ++fi)
+        {
+            const auto& f = schema[fi];
+            if (f.str_encoding == soa_string_encoding_t::offset)
+            {
+                is_offset_field[fi] = true;
+            }
+        }
+
+        // Read field value
+        auto read_field = [&](std::size_t fi) -> bool
+        {
+            const auto& f = schema[fi];
+            auto& data = field_data[fi];
+
+            switch (f.type_marker)
+            {
+                case 0x54:  // bool
+                {
+                    get();
+                    if (!unexpect_eof(input_format, "SOA bool"))
+                    {
+                        return false;
+                    }
+                    data.bools.push_back(current == 0x54);
+                    return true;
+                }
+
+                case 0x5A:  // null - no payload, just track count
+                    data.bools.push_back(false);  // placeholder
+                    return true;
+
+                case 0x53:  // string
+                {
+                    if (f.str_encoding == soa_string_encoding_t::fixed)
+                    {
+                        string_t s;
+                        if (!get_string(input_format, f.fixed_length, s))
+                        {
+                            return false;
+                        }
+                        while (!s.empty() && s.back() == 0x00)
+                        {
+                            s.pop_back();
+                        }
+                        data.strings.push_back(std::move(s));
+                        return true;
+                    }
+                    if (f.str_encoding == soa_string_encoding_t::dict)
+                    {
+                        std::size_t idx = 0;
+                        if (!read_soa_index(f.str_index_size, idx))
+                        {
+                            return false;
+                        }
+                        if (idx >= f.str_dict.size())
+                            return sax->parse_error(chars_read, get_token_string(),
+                                                    parse_error::create(113, chars_read,
+                                                            exception_message(input_format, "dict index out of range", "SOA"), nullptr));
+                        data.strings.push_back(f.str_dict[idx]);
+                        return true;
+                    }
+                    if (f.str_encoding == soa_string_encoding_t::offset)
+                    {
+                        std::size_t dummy = 0;
+                        if (!read_soa_index(f.str_index_size, dummy))
+                        {
+                            return false;
+                        }
+                        data.strings.emplace_back();
+                        return true;
+                    }
+                    return false;
+                }
+
+                case 0x48:  // high-precision
+                {
+                    string_t s;
+                    if (!get_string(input_format, f.fixed_length, s))
+                    {
+                        return false;
+                    }
+                    while (!s.empty() && s.back() == 0x00)
+                    {
+                        s.pop_back();
+                    }
+                    data.strings.push_back(std::move(s));
+                    return true;
+                }
+
+                case 'U':
+                case 'B':
+                {
+                    std::uint8_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.unsigneds.push_back(v);
+                    return true;
+                }
+
+                case 'i':
+                {
+                    std::int8_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.integers.push_back(v);
+                    return true;
+                }
+
+                case 'u':
+                {
+                    std::uint16_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.unsigneds.push_back(v);
+                    return true;
+                }
+
+                case 'I':
+                {
+                    std::int16_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.integers.push_back(v);
+                    return true;
+                }
+
+                case 'm':
+                {
+                    std::uint32_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.unsigneds.push_back(v);
+                    return true;
+                }
+
+                case 'l':
+                {
+                    std::int32_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.integers.push_back(v);
+                    return true;
+                }
+
+                case 'M':
+                {
+                    std::uint64_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.unsigneds.push_back(v);
+                    return true;
+                }
+
+                case 'L':
+                {
+                    std::int64_t v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.integers.push_back(v);
+                    return true;
+                }
+
+                case 'd':
+                {
+                    float v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.floats.push_back(v);
+                    return true;
+                }
+
+                case 'D':
+                {
+                    double v{};
+                    if (!get_number(input_format, v))
+                    {
+                        return false;
+                    }
+                    data.floats.push_back(v);
+                    return true;
+                }
+
+                case 'h':
+                {
+                    const auto b1 = get();
+                    if (!unexpect_eof(input_format, "number"))
+                    {
+                        return false;
+                    }
+                    const auto b2 = get();
+                    if (!unexpect_eof(input_format, "number"))
+                    {
+                        return false;
+                    }
+                    const auto half = static_cast<unsigned>((static_cast<unsigned char>(b2) << 8u) +
+                                                            static_cast<unsigned char>(b1));
+                    const int exp = (half >> 10u) & 0x1Fu;
+                    const unsigned mant = half & 0x3FFu;
+                    double val;
+                    if (exp == 0)
+                    {
+                        val = std::ldexp(mant, -24);
+                    }
+                    else if (exp == 31)
+                        val = (mant == 0) ? std::numeric_limits<double>::infinity()
+                              : std::numeric_limits<double>::quiet_NaN();
+                    else
+                    {
+                        val = std::ldexp(mant + 1024, exp - 25);
+                    }
+                    if ((half & 0x8000u) != 0)
+                    {
+                        val = -val;
+                    }
+                    data.floats.push_back(val);
+                    return true;
+                }
+
+                default:
+                    return sax->parse_error(chars_read, get_token_string(),
+                                            parse_error::create(113, chars_read,
+                                                    exception_message(input_format, "unsupported SOA type", "SOA"), nullptr));
+            }
+        };
+
+        // Read payload
+        if (is_row_major)
+        {
+            for (std::size_t ri = 0; ri < count; ++ri)
+                for (std::size_t fi = 0; fi < nf; ++fi)
+                    if (JSON_HEDLEY_UNLIKELY(!read_field(fi)))
+                    {
+                        return false;
+                    }
+        }
+        else
+        {
+            for (std::size_t fi = 0; fi < nf; ++fi)
+                for (std::size_t ri = 0; ri < count; ++ri)
+                    if (JSON_HEDLEY_UNLIKELY(!read_field(fi)))
+                    {
+                        return false;
+                    }
+        }
+
+        // Read offset tables and resolve strings
+        for (std::size_t fi = 0; fi < nf; ++fi)
+        {
+            if (!is_offset_field[fi])
+            {
+                continue;
+            }
+
+            const auto& f = schema[fi];
+
+            std::vector<std::size_t> offsets(count + 1);
+            for (std::size_t i = 0; i <= count; ++i)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!read_soa_index(f.str_index_size, offsets[i])))
+                {
+                    return false;
+                }
+            }
+
+            std::size_t buf_len = offsets[count];
+            string_t buffer;
+            if (buf_len > 0)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!get_string(input_format, buf_len, buffer)))
+                {
+                    return false;
+                }
+            }
+
+            for (std::size_t ri = 0; ri < count; ++ri)
+            {
+                std::size_t start = offsets[ri];
+                std::size_t end = offsets[ri + 1];
+                if (JSON_HEDLEY_UNLIKELY(start > end || end > buffer.size()))
+                {
+                    return sax->parse_error(chars_read, get_token_string(),
+                                            parse_error::create(113, chars_read,
+                                                    exception_message(input_format, "invalid offset range", "SOA"), nullptr));
+                }
+                field_data[fi].strings[ri] = buffer.substr(start, end - start);
+            }
+        }
+
+        // Emit value helper
+        auto emit_value = [&](std::size_t fi, std::size_t ri) -> bool
+        {
+            const auto& f = schema[fi];
+            auto& data = field_data[fi];
+
+            switch (f.type_marker)
+            {
+                case 0x54:
+                    return sax->boolean(data.bools[ri]);
+                case 0x5A:
+                    return sax->null();
+                case 0x53:
+                    return sax->string(data.strings[ri]);
+                case 0x48:
+                {
+                    const auto& num_str = data.strings[ri];
+                    std::vector<char> nv(num_str.begin(), num_str.end());
+                    using ia_t = decltype(detail::input_adapter(nv));
+                    auto lex = detail::lexer<BasicJsonType, ia_t>(detail::input_adapter(nv), false);
+                    const auto tok = lex.scan();
+                    using tt = typename detail::lexer_base<BasicJsonType>::token_type;
+                    switch (tok)
+                    {
+                        case tt::value_integer:
+                            return sax->number_integer(lex.get_number_integer());
+                        case tt::value_unsigned:
+                            return sax->number_unsigned(lex.get_number_unsigned());
+                        case tt::value_float:
+                            return sax->number_float(lex.get_number_float(), lex.get_token_string());
+                        default:
+                            return sax->string(data.strings[ri]);
+                    }
+                }
+                case 'i':
+                case 'I':
+                case 'l':
+                case 'L':
+                    return sax->number_integer(data.integers[ri]);
+                case 'U':
+                case 'B':
+                case 'u':
+                case 'm':
+                case 'M':
+                    return sax->number_unsigned(data.unsigneds[ri]);
+                case 'd':
+                case 'D':
+                case 'h':
+                    return sax->number_float(static_cast<number_float_t>(data.floats[ri]), "");
+                default:
+                    return false;
+            }
+        };
+
+        // Emit results
+        if (is_row_major)
+        {
+            if (JSON_HEDLEY_UNLIKELY(!sax->start_array(count)))
+            {
+                return false;
+            }
+            for (std::size_t ri = 0; ri < count; ++ri)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!sax->start_object(nf)))
+                {
+                    return false;
+                }
+                for (std::size_t fi = 0; fi < nf; ++fi)
+                {
+                    string_t key = schema[fi].name;
+                    if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !emit_value(fi, ri)))
+                    {
+                        return false;
+                    }
+                }
+                if (JSON_HEDLEY_UNLIKELY(!sax->end_object()))
+                {
+                    return false;
+                }
+            }
+            return sax->end_array();
+        }
+        else
+        {
+            if (JSON_HEDLEY_UNLIKELY(!sax->start_object(nf)))
+            {
+                return false;
+            }
+            for (std::size_t fi = 0; fi < nf; ++fi)
+            {
+                string_t key = schema[fi].name;
+                if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !sax->start_array(count)))
+                {
+                    return false;
+                }
+                for (std::size_t ri = 0; ri < count; ++ri)
+                {
+                    if (JSON_HEDLEY_UNLIKELY(!emit_value(fi, ri)))
+                    {
+                        return false;
+                    }
+                }
+                if (JSON_HEDLEY_UNLIKELY(!sax->end_array()))
+                {
+                    return false;
+                }
+            }
+            return sax->end_object();
+        }
+    }
+
+
+    /*!
+    @brief Parse BJData Structure-of-Arrays (SOA) format (Draft 4)
+
+    SOA format allows storing packed object data in either row-major or
+    column-major order for efficient binary serialization.
+
+    Syntax: [$  {<schema>}  #<count>  <payload>    // row-major
+            {$  {<schema>}  #<count>  <payload>    // column-major
+
+    @param[in] is_row_major  true for row-major (interleaved), false for column-major
+    @return whether parsing completed successfully
+    */
+    bool parse_bjdata_soa(const bool is_row_major)
+    {
+        soa_schema_t schema;
+        bool no_ndarray = true;
+        bool has_offset_fields = false;
+
+        // Parse schema: payload-less object defining record structure
+        while (true)
+        {
+            get();
+            if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA schema")))
+            {
+                return false;
+            }
+
+            if (current == 0x7D)  // '}' end of schema
+            {
+                break;
+            }
+
+            if (current == 0x4E)  // 'N' no-op
+            {
+                continue;
+            }
+
+            soa_field_t field;
+            std::size_t key_len = 0;
+
+            if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(key_len, no_ndarray, current) ||
+                                     !get_string(input_format, key_len, field.name)))
+            {
+                return false;
+            }
+
+            get();
+            if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA type")))
+            {
+                return false;
+            }
+
+            field.type_marker = current;
+
+            // Handle '[' as array notation for variable-length strings
+            if (current == 0x5B)  // '['
+            {
+                field.type_marker = 0x53;  // String type
+
+                get();
+                if (JSON_HEDLEY_UNLIKELY(current != 0x24))  // '$'
+                {
+                    return sax->parse_error(chars_read, get_token_string(),
+                                            parse_error::create(113, chars_read,
+                                                    exception_message(input_format, "expected '$' after '['", "SOA"), nullptr));
+                }
+
+                get();
+                if (current == 0x53)  // 'S' - dictionary [$S#n strings...]
+                {
+                    field.str_encoding = soa_string_encoding_t::dict;
+
+                    get();
+                    if (JSON_HEDLEY_UNLIKELY(current != 0x23))  // '#'
+                    {
+                        return sax->parse_error(chars_read, get_token_string(),
+                                                parse_error::create(113, chars_read,
+                                                        exception_message(input_format, "expected '#' in dict", "SOA"), nullptr));
+                    }
+
+                    std::size_t dict_count = 0;
+                    if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(dict_count, no_ndarray)))
+                    {
+                        return false;
+                    }
+
+                    field.str_dict.reserve(dict_count);
+                    for (std::size_t i = 0; i < dict_count; ++i)
+                    {
+                        string_t s;
+                        if (JSON_HEDLEY_UNLIKELY(!get_ubjson_string(s)))
+                        {
+                            return false;
+                        }
+                        field.str_dict.push_back(std::move(s));
+                    }
+
+                    field.str_index_size = dict_count <= 255 ? 1 : dict_count <= 65535 ? 2 : 4;
+                }
+                else  // offset [$<type>]
+                {
+                    field.str_encoding = soa_string_encoding_t::offset;
+                    field.str_index_size = soa_index_size(current);
+
+                    if (JSON_HEDLEY_UNLIKELY(field.str_index_size == 0))
+                    {
+                        return sax->parse_error(chars_read, get_token_string(),
+                                                parse_error::create(113, chars_read,
+                                                        exception_message(input_format, "invalid offset type", "SOA"), nullptr));
+                    }
+
+                    get();
+                    if (JSON_HEDLEY_UNLIKELY(current != 0x5D))  // ']'
+                    {
+                        return sax->parse_error(chars_read, get_token_string(),
+                                                parse_error::create(113, chars_read,
+                                                        exception_message(input_format, "expected ']'", "SOA"), nullptr));
+                    }
+                    has_offset_fields = true;
+                }
+            }
+            else if (current == 0x53)  // 'S' fixed-length string
+            {
+                field.str_encoding = soa_string_encoding_t::fixed;
+                if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(field.fixed_length, no_ndarray)))
+                {
+                    return false;
+                }
+            }
+            else if (current == 0x48)  // 'H' high-precision
+            {
+                if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(field.fixed_length, no_ndarray)))
+                {
+                    return false;
+                }
+            }
+
+            schema.push_back(std::move(field));
+        }
+
+        get();
+        if (JSON_HEDLEY_UNLIKELY(current != 0x23))  // '#'
+        {
+            return sax->parse_error(chars_read, get_token_string(),
+                                    parse_error::create(113, chars_read,
+                                            exception_message(input_format, "expected '#' after schema", "SOA"), nullptr));
+        }
+
+        std::size_t count = 0;
+        if (JSON_HEDLEY_UNLIKELY(!get_ubjson_size_value(count, no_ndarray)))
+        {
+            return false;
+        }
+
+        if (has_offset_fields)
+        {
+            return parse_bjdata_soa_buffered(schema, count, is_row_major);
+        }
+
+        return emit_soa_streaming(schema, count, is_row_major);
+    }
+
+    /*!
+    @brief Read a single SOA field value based on its type marker
+
+    @param[in] f  field definition containing type marker and optional fixed length
+    @return whether value reading completed successfully
+    */
+    bool get_bjdata_soa_value(const soa_field_t& f)
+    {
+        // Boolean type 'T': 1 byte payload (T or F marker)
+        if (f.type_marker == 0x54)
+        {
+            get();
+            if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA bool")))
+            {
+                return false;
+            }
+            return sax->boolean(current == 0x54);  // T=true, F=false
+        }
+
+        // Null type 'Z': 0 bytes in payload
+        if (f.type_marker == 0x5A)
+        {
+            return sax->null();
+        }
+
+        // Fixed-length string 'S' or high-precision number 'H'
+        if (f.type_marker == 0x53 || f.type_marker == 0x48)
+        {
+            string_t s;
+            if (JSON_HEDLEY_UNLIKELY(!get_string(input_format, f.fixed_length, s)))
+            {
+                return false;
+            }
+            // Remove trailing null padding for strings
+            while (!s.empty() && s.back() == 0x00)
+            {
+                s.pop_back();
+            }
+            return sax->string(s);
+        }
+
+        // All other types: use standard UBJSON value parsing
+        return get_ubjson_value(f.type_marker);
+    }    // Note, no reader for UBJSON binary types is implemented because they do
     // not exist
 
     bool get_ubjson_high_precision_number()
@@ -3040,7 +3932,7 @@ class binary_reader
 
     // excluded markers in bjdata optimized type
 #define JSON_BINARY_READER_MAKE_BJD_OPTIMIZED_TYPE_MARKERS_ \
-    make_array<char_int_type>('F', 'H', 'N', 'S', 'T', 'Z', '[', '{')
+    make_array<char_int_type>('F', 'H', 'N', 'S', 'T', 'Z', '[')
 
 #define JSON_BINARY_READER_MAKE_BJD_TYPES_MAP_ \
     make_array<bjd_type>(                      \
