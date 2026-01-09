@@ -71,7 +71,7 @@ class binary_writer
     /// SOA field schema with string encoding info
     struct bjdata_soa_field_t
     {
-        char_int_type type_marker;
+        std::int32_t type_marker;
         bjdata_soa_string_encoding_t str_enc = bjdata_soa_string_encoding_t::fixed;
         std::size_t str_fixed_len = 0;
         std::vector<std::size_t> str_indices;
@@ -2092,7 +2092,7 @@ class binary_writer
 
         for (std::size_t fi = 0; fi < num_fields; ++fi)
         {
-            field_info[fi].type_marker = schema[fi].second;
+            field_info[fi].type_marker = static_cast<std::int32_t>(schema[fi].second);
 
             if (schema[fi].second == 0x53)  // String field
             {
@@ -2115,7 +2115,7 @@ class binary_writer
 
         for (std::size_t fi = 0; fi < num_fields; ++fi)
         {
-            field_info[fi].type_marker = schema[fi].second;
+            field_info[fi].type_marker = static_cast<std::int32_t>(schema[fi].second);
 
             if (schema[fi].second == 0x53)  // String field
             {
