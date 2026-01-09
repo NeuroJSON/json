@@ -45,6 +45,9 @@ enum class bjdata_soa_format_t
     col_major    ///< column-major: {$
 };
 
+/// BJData SOA string encoding type
+
+
 ///////////////////
 // binary writer //
 ///////////////////
@@ -58,6 +61,24 @@ class binary_writer
     using string_t = typename BasicJsonType::string_t;
     using binary_t = typename BasicJsonType::binary_t;
     using number_float_t = typename BasicJsonType::number_float_t;
+    enum class bjdata_soa_string_encoding_t
+    {
+        fixed,    ///< fixed-length padded strings
+        dict,     ///< dictionary encoding with indices
+        offset    ///< offset table + concatenated buffer
+    };
+
+    /// SOA field schema with string encoding info
+    struct bjdata_soa_field_t
+    {
+        std::int32_t type_marker;
+        bjdata_soa_string_encoding_t str_enc = bjdata_soa_string_encoding_t::fixed;
+        std::size_t str_fixed_len = 0;
+        std::vector<std::size_t> str_indices;
+        std::vector<string_t> str_dict;
+        std::vector<std::size_t> str_offsets;
+        string_t str_buffer;
+    };
 
   public:
     /*!
@@ -822,7 +843,7 @@ class binary_writer
                     std::vector<std::pair<string_t, std::int32_t>> schema;
                     if (get_bjdata_soa_schema(j, schema))
                     {
-                        write_bjdata_soa(j, schema, soa_format == bjdata_soa_format_t::row_major, use_bjdata);
+                        write_bjdata_soa(j, schema, soa_format == bjdata_soa_format_t::row_major, use_bjdata, 0.3);
                         break;
                     }
                 }
@@ -1802,6 +1823,9 @@ class binary_writer
                 case value_t::number_float:
                     t = ubjson_prefix(el.second, true);
                     break;
+                case value_t::string:
+                    t = 0x53;  // 'S' - string type marker
+                    break;
                 default:
                     // String, array, object, binary types not supported in basic SOA
                     return false;
@@ -1840,6 +1864,9 @@ class binary_writer
                     case value_t::number_float:
                         t = ubjson_prefix(el.second, true);
                         break;
+                    case value_t::string:
+                        t = 0x53;  // 'S' - string type marker
+                        break;
                     default:
                         return false;
                 }
@@ -1865,12 +1892,228 @@ class binary_writer
     @param[in] schema  field names and type markers
     @param[in] row_major  true for row-major, false for column-major
     @param[in] use_bjdata  whether to use BJData extensions
+    /*!
+    @brief Analyze string field for SOA encoding
     */
-    void write_bjdata_soa(const BasicJsonType& j,
-                          const std::vector<std::pair<string_t, std::int32_t>>& schema,
-                          const bool row_major, const bool use_bjdata)
+    void analyze_soa_string_field(const BasicJsonType& j,
+                                  const string_t& field_name,
+                                  double threshold,
+                                  bjdata_soa_field_t& field_info) const
     {
         const auto& arr = *j.m_data.m_value.array;
+        std::map<string_t, std::size_t> freq_map;
+        std::size_t max_len = 0;
+        std::size_t total_len = 0;
+
+        // Collect string statistics
+        for (const auto& obj : arr)
+        {
+            const auto& str = *obj.at(field_name).m_data.m_value.string;
+            freq_map[str]++;
+            max_len = (std::max)(max_len, str.size());
+            total_len += str.size();
+        }
+
+        std::size_t unique_count = freq_map.size();
+        double avg_len = arr.empty() ? 0.0 : static_cast<double>(total_len) / arr.size();
+
+        // Force offset if threshold is 0
+        if (threshold == 0.0)
+        {
+            field_info.str_enc = bjdata_soa_string_encoding_t::offset;
+
+            field_info.str_offsets.reserve(arr.size() + 1);
+            field_info.str_offsets.push_back(0);
+
+            for (const auto& obj : arr)
+            {
+                const auto& str = *obj.at(field_name).m_data.m_value.string;
+                field_info.str_buffer += str;
+                field_info.str_offsets.push_back(field_info.str_buffer.size());
+            }
+            return;
+        }
+
+        // Calculate costs
+        double thresh = (threshold > 0) ? threshold : 0.3;
+        std::size_t fixed_cost = max_len * arr.size();
+
+        // Dict cost
+        std::size_t idx_size = unique_count <= 255 ? 1 : unique_count <= 65535 ? 2 : 4;
+        std::size_t dict_cost = idx_size * arr.size() + total_len + unique_count * 2;
+
+        // Offset cost
+        std::size_t off_size = total_len <= 255 ? 1 : total_len <= 65535 ? 2 : 4;
+        std::size_t offset_cost = arr.size() * off_size + (arr.size() + 1) * off_size + total_len;
+
+        // Decision logic
+        if (unique_count <= static_cast<std::size_t>(arr.size() * thresh) &&
+                dict_cost < fixed_cost && dict_cost < offset_cost)
+        {
+            // Dictionary encoding
+            field_info.str_enc = bjdata_soa_string_encoding_t::dict;
+            for (const auto& p : freq_map)
+            {
+                field_info.str_dict.push_back(p.first);
+            }
+        }
+        else if (max_len > 32 && offset_cost < fixed_cost)
+        {
+            // Offset encoding
+            field_info.str_enc = bjdata_soa_string_encoding_t::offset;
+
+            field_info.str_offsets.reserve(arr.size() + 1);
+            field_info.str_offsets.push_back(0);
+
+            for (const auto& obj : arr)
+            {
+                const auto& str = *obj.at(field_name).m_data.m_value.string;
+                field_info.str_buffer += str;
+                field_info.str_offsets.push_back(field_info.str_buffer.size());
+            }
+        }
+        else
+        {
+            // Fixed-length encoding
+            field_info.str_enc = bjdata_soa_string_encoding_t::fixed;
+            field_info.str_fixed_len = max_len > 0 ? max_len : 1;
+        }
+    }
+
+    /*!
+    @brief Write SOA string schema
+    */
+    void write_soa_string_schema(const bjdata_soa_field_t& field, bool use_bjdata)
+    {
+        if (field.str_enc == bjdata_soa_string_encoding_t::dict)
+        {
+            // [$S#n str1 str2 ...]
+            oa->write_character(to_char_type(0x5B));  // '['
+            oa->write_character(to_char_type(0x24));  // '$'
+            oa->write_character(to_char_type(0x53));  // 'S'
+            oa->write_character(to_char_type(0x23));  // '#'
+            write_number_with_ubjson_prefix(field.str_dict.size(), true, use_bjdata);
+
+            for (const auto& s : field.str_dict)
+            {
+                write_number_with_ubjson_prefix(s.size(), true, use_bjdata);
+                oa->write_characters(reinterpret_cast<const CharType*>(s.c_str()), s.size());
+            }
+        }
+        else if (field.str_enc == bjdata_soa_string_encoding_t::offset)
+        {
+            // [$U] or [$u] or [$m]
+            std::size_t max_offset = field.str_buffer.size();
+            char index_type = max_offset <= 255 ? 'U' : max_offset <= 65535 ? 'u' : 'm';
+
+            oa->write_character(to_char_type(0x5B));  // '['
+            oa->write_character(to_char_type(0x24));  // '$'
+            oa->write_character(to_char_type(index_type));
+            oa->write_character(to_char_type(0x5D));  // ']'
+        }
+        else  // fixed
+        {
+            // S<int><len>
+            oa->write_character(to_char_type(0x53));  // 'S'
+            write_number_with_ubjson_prefix(field.str_fixed_len, true, use_bjdata);
+        }
+    }
+
+    /*!
+    @brief Write SOA string value
+    */
+    void write_soa_string_value(const bjdata_soa_field_t& field,
+                                const string_t& value,
+                                std::size_t record_index,
+                                bool use_bjdata)
+    {
+        if (field.str_enc == bjdata_soa_string_encoding_t::dict)
+        {
+            // Write index
+            auto it = std::find(field.str_dict.begin(), field.str_dict.end(), value);
+            std::size_t idx = std::distance(field.str_dict.begin(), it);
+
+            if (idx < 256)
+            {
+                oa->write_character(static_cast<CharType>(idx));
+            }
+            else if (idx < 65536)
+            {
+                write_number(static_cast<std::uint16_t>(idx), use_bjdata);
+            }
+            else
+            {
+                write_number(static_cast<std::uint32_t>(idx), use_bjdata);
+            }
+        }
+        else if (field.str_enc == bjdata_soa_string_encoding_t::fixed)
+        {
+            // Write padded string
+            oa->write_characters(reinterpret_cast<const CharType*>(value.c_str()), value.size());
+            for (std::size_t i = value.size(); i < field.str_fixed_len; ++i)
+            {
+                oa->write_character(to_char_type(0x00));
+            }
+        }
+        // offset encoding: indices written during payload, strings written after
+    }
+
+    /*!
+    @brief Write SOA offset table and string buffer
+    */
+    void write_soa_offset_table(const bjdata_soa_field_t& field, bool use_bjdata)
+    {
+        std::size_t max_offset = field.str_buffer.size();
+
+        // Write offset table
+        for (std::size_t offset : field.str_offsets)
+        {
+            if (max_offset <= 255)
+            {
+                oa->write_character(static_cast<CharType>(offset));
+            }
+            else if (max_offset <= 65535)
+            {
+                write_number(static_cast<std::uint16_t>(offset), use_bjdata);
+            }
+            else
+            {
+                write_number(static_cast<std::uint32_t>(offset), use_bjdata);
+            }
+        }
+
+        // Write buffer
+        oa->write_characters(reinterpret_cast<const CharType*>(field.str_buffer.c_str()),
+                             field.str_buffer.size());
+    }
+
+
+    void write_bjdata_soa(const BasicJsonType& j,
+                          const std::vector<std::pair<string_t, std::int32_t>>& schema,
+                          const bool row_major, const bool use_bjdata,
+                          const double soa_threshold = 0.3)
+    {
+        const auto& arr = *j.m_data.m_value.array;
+        const std::size_t count = arr.size();
+        const std::size_t num_fields = schema.size();
+
+        // Analyze string fields
+        std::vector<bjdata_soa_field_t> field_info(num_fields);
+        bool has_offset_fields = false;
+
+        for (std::size_t fi = 0; fi < num_fields; ++fi)
+        {
+            field_info[fi].type_marker = schema[fi].second;
+
+            if (schema[fi].second == 0x53)  // String field
+            {
+                analyze_soa_string_field(j, schema[fi].first, soa_threshold, field_info[fi]);
+                if (field_info[fi].str_enc == bjdata_soa_string_encoding_t::offset)
+                {
+                    has_offset_fields = true;
+                }
+            }
+        }
 
         // Write container marker: '[' for row-major, '{' for column-major
         oa->write_character(row_major ? to_char_type(0x5B) : to_char_type(0x7B));
@@ -1880,28 +2123,81 @@ class binary_writer
         oa->write_character(to_char_type(0x7B));  // '{'
 
         // Write schema: field names followed by type markers (no values)
-        for (const auto& f : schema)
+
+        for (std::size_t fi = 0; fi < num_fields; ++fi)
         {
-            write_number_with_ubjson_prefix(f.first.size(), true, use_bjdata);
-            oa->write_characters(reinterpret_cast<const CharType*>(f.first.c_str()), f.first.size());
-            oa->write_character(to_char_type(f.second));
+            field_info[fi].type_marker = schema[fi].second;
+
+            if (schema[fi].second == 0x53)  // String field
+            {
+                analyze_soa_string_field(j, schema[fi].first, soa_threshold, field_info[fi]);
+                if (field_info[fi].str_enc == bjdata_soa_string_encoding_t::offset)
+                {
+                    has_offset_fields = true;
+                }
+            }
+        }
+
+        for (std::size_t fi = 0; fi < num_fields; ++fi)
+        {
+            const auto& f = schema[fi];
+            write_number_with_ubjson_prefix(schema[fi].first.size(), true, use_bjdata);
+            oa->write_characters(reinterpret_cast<const CharType*>(schema[fi].first.c_str()), schema[fi].first.size());
+            if (field_info[fi].type_marker == 0x53)  // String
+            {
+                write_soa_string_schema(field_info[fi], use_bjdata);
+            }
+            else
+            {
+                oa->write_character(to_char_type(f.second));
+            }
         }
 
         // Close schema and write count
         oa->write_character(to_char_type(0x7D));  // '}' end schema
         oa->write_character(to_char_type(0x23));  // '#' count marker
-        write_number_with_ubjson_prefix(arr.size(), true, use_bjdata);
+        write_number_with_ubjson_prefix(count, true, use_bjdata);
 
         // Lambda to write a single value without type marker
-        auto write_val = [this, use_bjdata](const BasicJsonType & v, std::int32_t t)
+        auto write_field_val = [&](std::size_t fi, std::size_t ri)
         {
-            if (t == 0x54)  // Boolean: write T or F marker (1 byte)
+            const auto& f = schema[fi];
+            const auto& rec = arr[ri];
+            const auto& v = rec.at(f.first);
+            const auto& finfo = field_info[fi];
+
+            if (f.second == 0x54)  // Boolean
             {
                 oa->write_character(v.m_data.m_value.boolean ? to_char_type(0x54) : to_char_type(0x46));
             }
-            else if (t == 0x5A)  // Null: write nothing (0 bytes)
+            else if (f.second == 0x5A)  // Null
             {
-                // No payload for null type per Draft 4 spec
+                // No payload for null
+            }
+            else if (f.second == 0x53)  // String
+            {
+                if (finfo.str_enc == bjdata_soa_string_encoding_t::offset)
+                {
+                    // Write offset index
+                    std::size_t idx = finfo.str_offsets[ri];
+                    std::size_t max_off = finfo.str_buffer.size();
+                    if (max_off <= 255)
+                    {
+                        oa->write_character(static_cast<CharType>(idx));
+                    }
+                    else if (max_off <= 65535)
+                    {
+                        write_number(static_cast<std::uint16_t>(idx), use_bjdata);
+                    }
+                    else
+                    {
+                        write_number(static_cast<std::uint32_t>(idx), use_bjdata);
+                    }
+                }
+                else
+                {
+                    write_soa_string_value(finfo, *v.m_data.m_value.string, ri, use_bjdata);
+                }
             }
             else if (v.type() == value_t::number_float)
             {
@@ -1917,26 +2213,36 @@ class binary_writer
             }
         };
 
-        // Write payload in row-major or column-major order
+        // Write payload
         if (row_major)
         {
-            // Row-major: all fields of record 1, then all fields of record 2, etc.
-            for (const auto& rec : arr)
+            for (std::size_t ri = 0; ri < count; ++ri)
             {
-                for (const auto& f : schema)
+                for (std::size_t fi = 0; fi < num_fields; ++fi)
                 {
-                    write_val(rec.at(f.first), f.second);
+                    write_field_val(fi, ri);
                 }
             }
         }
         else
         {
-            // Column-major: all values of field 1, then all values of field 2, etc.
-            for (const auto& f : schema)
+            for (std::size_t fi = 0; fi < num_fields; ++fi)
             {
-                for (const auto& rec : arr)
+                for (std::size_t ri = 0; ri < count; ++ri)
                 {
-                    write_val(rec.at(f.first), f.second);
+                    write_field_val(fi, ri);
+                }
+            }
+        }
+
+        // Write offset tables and buffers
+        if (has_offset_fields)
+        {
+            for (std::size_t fi = 0; fi < num_fields; ++fi)
+            {
+                if (field_info[fi].str_enc == bjdata_soa_string_encoding_t::offset)
+                {
+                    write_soa_offset_table(field_info[fi], use_bjdata);
                 }
             }
         }
