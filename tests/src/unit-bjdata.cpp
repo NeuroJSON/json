@@ -5439,7 +5439,8 @@ TEST_CASE("SOA Coverage Tests")
                 'i', 1, 'x', '[', 'S',  // missing '$' after '['
                 '}', '#', 'i', 1
             };
-            CHECK_THROWS_WITH(json::from_bjdata(v),
+            json _;
+            CHECK_THROWS_WITH(_ = json::from_bjdata(v),
                               "[json.exception.parse_error.113] parse error at byte 8: "
                               "syntax error while parsing BJData SOA: expected '$' after '['");
         }
@@ -5452,7 +5453,8 @@ TEST_CASE("SOA Coverage Tests")
                 'i', 1, 'x', '[', '$', 'S', 'i', 2,  // missing '#' after 'S'
                 '}', '#', 'i', 1
             };
-            CHECK_THROWS_WITH(json::from_bjdata(v),
+            json _;
+            CHECK_THROWS_WITH(_ = json::from_bjdata(v),
                               "[json.exception.parse_error.113] parse error at byte 10: "
                               "syntax error while parsing BJData SOA: expected '#' in dict");
         }
@@ -5465,7 +5467,8 @@ TEST_CASE("SOA Coverage Tests")
                 'i', 1, 'x', '[', '$', 'Z', ']',  // 'Z' is not valid for offset
                 '}', '#', 'i', 1
             };
-            CHECK_THROWS_WITH(json::from_bjdata(v),
+            json _;
+            CHECK_THROWS_WITH(_ = json::from_bjdata(v),
                               "[json.exception.parse_error.113] parse error at byte 9: "
                               "syntax error while parsing BJData SOA: invalid offset type");
         }
@@ -5478,7 +5481,8 @@ TEST_CASE("SOA Coverage Tests")
                 'i', 1, 'x', '[', '$', 'U', '}',  // '}' instead of ']'
                 '#', 'i', 1
             };
-            CHECK_THROWS_WITH(json::from_bjdata(v),
+            json _;
+            CHECK_THROWS_WITH(_ = json::from_bjdata(v),
                               "[json.exception.parse_error.113] parse error at byte 10: "
                               "syntax error while parsing BJData SOA: expected ']'");
         }
@@ -5491,7 +5495,8 @@ TEST_CASE("SOA Coverage Tests")
                 'i', 1, 'x', 'U',
                 '}', 'i', 2  // 'i' instead of '#'
             };
-            CHECK_THROWS_WITH(json::from_bjdata(v),
+            json _;
+            CHECK_THROWS_WITH(_ = json::from_bjdata(v),
                               "[json.exception.parse_error.113] parse error at byte 9: "
                               "syntax error while parsing BJData SOA: expected '#' after schema");
         }
@@ -5502,7 +5507,8 @@ TEST_CASE("SOA Coverage Tests")
             {
                 '{', '$', '{'  // truncated
             };
-            CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
         }
 
         SECTION("error: unexpected EOF reading type")
@@ -5512,7 +5518,8 @@ TEST_CASE("SOA Coverage Tests")
                 '{', '$', '{',
                 'i', 1, 'x'  // truncated before type marker
             };
-            CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
         }
     }
 
@@ -5824,7 +5831,8 @@ TEST_CASE("SOA Coverage Tests")
                 0, 1,
                 'x'
             };
-            CHECK_THROWS_WITH(json::from_bjdata(v),
+            json _;
+            CHECK_THROWS_WITH(_ = json::from_bjdata(v),
                               "[json.exception.parse_error.113] parse error at byte 18: "
                               "syntax error while parsing BJData SOA: unsupported SOA type");
         }
@@ -5955,7 +5963,8 @@ TEST_CASE("SOA Coverage Tests")
                 '}', '#', 'i', 1,
                 5  // index 5 but dict only has 2 entries
             };
-            CHECK_THROWS_WITH(json::from_bjdata(v),
+            json _;
+            CHECK_THROWS_WITH(_ = json::from_bjdata(v),
                               "[json.exception.parse_error.113] parse error at byte 27: "
                               "syntax error while parsing BJData SOA: dict index out of range");
         }
@@ -6144,7 +6153,8 @@ TEST_CASE("SOA Coverage Tests")
             5, 2, 10  // offsets: 5, 2, 10 - invalid: 5 > 2
         };
         // Note: the actual buffer would need to be provided but error triggers first
-        CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+        json _;
+        CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
     }
 
     SECTION("error: offset exceeds buffer")
@@ -6158,7 +6168,8 @@ TEST_CASE("SOA Coverage Tests")
             0, 100,      // offsets: 0, 100 - but buffer only has 3 bytes
             'a', 'b', 'c'
         };
-        CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+        json _;
+        CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
     }
 
     // ========================================================================
@@ -6618,7 +6629,8 @@ TEST_CASE("SOA Coverage Tests")
                 '}', '#', 'i', 1
                 // missing bool value
             };
-            CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
         }
 
         SECTION("EOF reading half-float byte 1")
@@ -6630,7 +6642,8 @@ TEST_CASE("SOA Coverage Tests")
                 '}', '#', 'i', 1,
                 0x00  // only 1 byte, need 2
             };
-            CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
         }
 
         SECTION("EOF reading half-float byte 2")
@@ -6642,7 +6655,8 @@ TEST_CASE("SOA Coverage Tests")
                 '}', '#', 'i', 1
                 // no bytes for half-float
             };
-            CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
         }
 
         SECTION("EOF reading string buffer")
@@ -6656,7 +6670,8 @@ TEST_CASE("SOA Coverage Tests")
                 0, 10,       // offsets claim 10 bytes
                 'a', 'b'     // only 2 bytes provided
             };
-            CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
         }
 
         SECTION("EOF reading offset table")
@@ -6669,7 +6684,8 @@ TEST_CASE("SOA Coverage Tests")
                 0, 0,        // placeholders
                 0, 3         // incomplete offset table (need 3 entries)
             };
-            CHECK_THROWS_AS(json::from_bjdata(v), json::parse_error);
+            json _;
+            CHECK_THROWS_AS(_ = json::from_bjdata(v), json::parse_error);
         }
     }
 
