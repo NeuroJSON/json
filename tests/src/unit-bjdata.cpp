@@ -6533,7 +6533,7 @@ TEST_CASE("SOA Coverage Tests")
             json j = json::array();
             for (int i = 0; i < 3; ++i)
             {
-                j.push_back({{"s", std::string(100, 'a' + i)}});
+                j.push_back({{"s", std::string(100, static_cast<char>('a' + i))}});
             }
             auto v = json::to_bjdata(j, true, true,
                                      json::bjdata_version_t::draft4,
