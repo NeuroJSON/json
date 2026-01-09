@@ -1827,8 +1827,12 @@ class binary_writer
                 case value_t::string:
                     t = 0x53;  // 'S' - string type marker
                     break;
+                case value_t::object:
+                case value_t::array:
+                case value_t::binary:
+                case value_t::discarded:
                 default:
-                    // String, array, object, binary types not supported in basic SOA
+                    // Complex types not supported in basic SOA
                     return false;
             }
             schema.emplace_back(el.first, t);
@@ -1868,6 +1872,10 @@ class binary_writer
                     case value_t::string:
                         t = 0x53;  // 'S' - string type marker
                         break;
+                    case value_t::object:
+                    case value_t::array:
+                    case value_t::binary:
+                    case value_t::discarded:
                     default:
                         return false;
                 }
@@ -1937,7 +1945,7 @@ class binary_writer
         std::size_t offset_cost = arr.size() * off_size + (arr.size() + 1) * off_size + total_len;
 
         // Decision logic
-        if (unique_count <= static_cast<std::size_t>(arr.size() * thresh) &&
+        if (unique_count <= static_cast<std::size_t>(static_cast<double>(arr.size()) * thresh) &&
                 dict_cost < fixed_cost && dict_cost < offset_cost)
         {
             // Dictionary encoding
@@ -1998,7 +2006,7 @@ class binary_writer
 
             oa->write_character(to_char_type(0x5B));  // '['
             oa->write_character(to_char_type(0x24));  // '$'
-            oa->write_character(to_char_type(index_type));
+            oa->write_character(to_char_type(static_cast<std::uint8_t>(index_type)));
             oa->write_character(to_char_type(0x5D));  // ']'
         }
         else  // fixed
@@ -2020,7 +2028,7 @@ class binary_writer
         {
             // Write index
             auto it = std::find(field.str_dict.begin(), field.str_dict.end(), value);
-            std::size_t idx = std::distance(field.str_dict.begin(), it);
+            std::size_t idx = static_cast<std::size_t>(std::distance(field.str_dict.begin(), it));
 
             if (idx < 256)
             {
@@ -2138,7 +2146,7 @@ class binary_writer
             }
             else
             {
-                oa->write_character(to_char_type(f.second));
+                oa->write_character(to_char_type(static_cast<std::uint8_t>(f.second)));
             }
         }
 

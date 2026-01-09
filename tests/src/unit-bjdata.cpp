@@ -5410,8 +5410,8 @@ TEST_CASE("SOA Coverage Tests")
                 '{', '$', '{', '}', '#', 'i', 0
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j.is_object());
-            CHECK(j.empty());
+            CHECK((j.is_object()));
+            CHECK((j.empty()));
         }
 
         SECTION("schema with no-op markers")
@@ -5427,8 +5427,8 @@ TEST_CASE("SOA Coverage Tests")
                 'A', 'B'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["x"][0] == 65);
-            CHECK(j["x"][1] == 66);
+            CHECK((j["x"][0] == 65));
+            CHECK((j["x"][1] == 66));
         }
 
         SECTION("error: missing '$' after '['")
@@ -5545,8 +5545,8 @@ TEST_CASE("SOA Coverage Tests")
                 'a', 'b', 'c', 'd', 'e', 'f'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 127);
-            CHECK(j["n"][1] == -128);
+            CHECK((j["n"][0] == 127));
+            CHECK((j["n"][1] == -128));
         }
 
         SECTION("int16 field")
@@ -5563,7 +5563,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == -32768);
+            CHECK((j["n"][0] == -32768));
         }
 
         SECTION("int32 field")
@@ -5580,7 +5580,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 1);
+            CHECK((j["n"][0] == 1));
         }
 
         SECTION("int64 field")
@@ -5597,7 +5597,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == INT64_MAX);
+            CHECK((j["n"][0] == INT64_MAX));
         }
 
         SECTION("uint16 field")
@@ -5614,7 +5614,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 65535);
+            CHECK((j["n"][0] == 65535));
         }
 
         SECTION("uint32 field")
@@ -5631,7 +5631,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == UINT32_MAX);
+            CHECK((j["n"][0] == UINT32_MAX));
         }
 
         SECTION("uint64 field")
@@ -5648,7 +5648,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == UINT64_MAX);
+            CHECK((j["n"][0] == UINT64_MAX));
         }
 
         SECTION("byte field")
@@ -5665,7 +5665,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 0xAB);
+            CHECK((j["n"][0] == 0xAB));
         }
 
         SECTION("float32 field")
@@ -5682,7 +5682,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 1.0);
+            CHECK((j["n"][0] == 1.0));
         }
 
         SECTION("float64 field")
@@ -5699,7 +5699,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 1.0);
+            CHECK((j["n"][0] == 1.0));
         }
 
         SECTION("half-float field")
@@ -5716,7 +5716,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 1.0);
+            CHECK((j["n"][0] == 1.0));
         }
 
         SECTION("half-float special values")
@@ -5734,8 +5734,8 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j1 = json::from_bjdata(v1);
-            CHECK(j1["n"][0] > 0);
-            CHECK(j1["n"][0] < 1e-6);
+            CHECK((j1["n"][0] > 0));
+            CHECK((j1["n"][0] < 1e-6));
 
             // Test infinity (exp=31, mant=0)
             std::vector<uint8_t> v2 =
@@ -5750,7 +5750,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j2 = json::from_bjdata(v2);
-            CHECK(j2["n"][0] == std::numeric_limits<double>::infinity());
+            CHECK((j2["n"][0] == std::numeric_limits<double>::infinity()));
 
             // Test NaN (exp=31, mant!=0)
             std::vector<uint8_t> v3 =
@@ -5765,7 +5765,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j3 = json::from_bjdata(v3);
-            CHECK(std::isnan(j3["n"][0].get<double>()));
+            CHECK((std::isnan(j3["n"][0].get<double>())));
 
             // Test negative half-float
             std::vector<uint8_t> v4 =
@@ -5780,7 +5780,7 @@ TEST_CASE("SOA Coverage Tests")
                 'x'
             };
             const auto j4 = json::from_bjdata(v4);
-            CHECK(j4["n"][0] == -1.0);
+            CHECK((j4["n"][0] == -1.0));
         }
 
         SECTION("bool field true and false")
@@ -5797,8 +5797,8 @@ TEST_CASE("SOA Coverage Tests")
                 'a', 'b'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["b"][0] == true);
-            CHECK(j["b"][1] == false);
+            CHECK((j["b"][0] == true));
+            CHECK((j["b"][1] == false));
         }
 
         SECTION("null field")
@@ -5815,8 +5815,8 @@ TEST_CASE("SOA Coverage Tests")
                 'a', 'b'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0].is_null());
-            CHECK(j["n"][1].is_null());
+            CHECK((j["n"][0].is_null()));
+            CHECK((j["n"][1].is_null()));
         }
 
         SECTION("error: unsupported type marker")
@@ -5876,8 +5876,8 @@ TEST_CASE("SOA Coverage Tests")
             }
 
             const auto j = json::from_bjdata(v);
-            CHECK(j["s"][0] == "hello");
-            CHECK(j["s"][1] == "bye");
+            CHECK((j["s"][0] == "hello"));
+            CHECK((j["s"][1] == "bye"));
         }
 
         SECTION("uint32 indices (size 4)")
@@ -5909,7 +5909,7 @@ TEST_CASE("SOA Coverage Tests")
             }
 
             const auto j = json::from_bjdata(v);
-            CHECK(j["s"][0] == "test");
+            CHECK((j["s"][0] == "test"));
         }
     }
 
@@ -5948,8 +5948,8 @@ TEST_CASE("SOA Coverage Tests")
             v.push_back(0x00);  // index 255
 
             const auto j = json::from_bjdata(v);
-            CHECK(j["s"][0] == "str0");
-            CHECK(j["s"][1] == "str255");
+            CHECK((j["s"][0] == "str0"));
+            CHECK((j["s"][1] == "str255"));
         }
 
         SECTION("error: dict index out of range")
@@ -5992,10 +5992,10 @@ TEST_CASE("SOA Coverage Tests")
             'A', 'l', 'i', 'c', 'e', 'B', 'o', 'b'
         };
         const auto j = json::from_bjdata(v);
-        CHECK(j[0]["id"] == 65);
-        CHECK(j[0]["name"] == "Alice");
-        CHECK(j[1]["id"] == 66);
-        CHECK(j[1]["name"] == "Bob");
+        CHECK((j[0]["id"] == 65));
+        CHECK((j[0]["name"] == "Alice"));
+        CHECK((j[1]["id"] == 66));
+        CHECK((j[1]["name"] == "Bob"));
     }
 
     // ========================================================================
@@ -6014,7 +6014,7 @@ TEST_CASE("SOA Coverage Tests")
                 '1', '2', '3', '4', '5', '6', '7', '8'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 12345678);
+            CHECK((j["n"][0] == 12345678));
         }
 
         SECTION("high-prec float")
@@ -6027,7 +6027,7 @@ TEST_CASE("SOA Coverage Tests")
                 '3', '.', '1', '4', '0'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == Approx(3.14));
+            CHECK((j["n"][0] == Approx(3.14)));
         }
 
         SECTION("high-prec with padding - streaming path")
@@ -6042,8 +6042,8 @@ TEST_CASE("SOA Coverage Tests")
                 '7', 0x00, 0x00, 0x00
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == 42);
-            CHECK(j["n"][1] == 7);
+            CHECK((j["n"][0] == 42));
+            CHECK((j["n"][1] == 7));
         }
 
         SECTION("high-prec invalid number falls back to string")
@@ -6056,7 +6056,7 @@ TEST_CASE("SOA Coverage Tests")
                 'a', 'b', 'c'  // not a valid number
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["n"][0] == "abc");
+            CHECK((j["n"][0] == "abc"));
         }
     }
 
@@ -6077,8 +6077,8 @@ TEST_CASE("SOA Coverage Tests")
                 'w', 'o', 'r', 'l', 'd'
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["s"][0] == "hello");
-            CHECK(j["s"][1] == "world");
+            CHECK((j["s"][0] == "hello"));
+            CHECK((j["s"][1] == "world"));
         }
 
         SECTION("dict string in streaming")
@@ -6093,9 +6093,9 @@ TEST_CASE("SOA Coverage Tests")
                 0, 1, 0  // indices
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["s"][0] == "yes");
-            CHECK(j["s"][1] == "no");
-            CHECK(j["s"][2] == "yes");
+            CHECK((j["s"][0] == "yes"));
+            CHECK((j["s"][1] == "no"));
+            CHECK((j["s"][2] == "yes"));
         }
 
         SECTION("all numeric types in streaming col-major")
@@ -6112,9 +6112,9 @@ TEST_CASE("SOA Coverage Tests")
                 0x00, 0x00, 0x80, 0x3F  // float 1.0
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j["a"][0] == 255);
-            CHECK(j["b"][0] == -128);
-            CHECK(j["c"][0] == 1.0f);
+            CHECK((j["a"][0] == 255));
+            CHECK((j["b"][0] == -128));
+            CHECK((j["c"][0] == 1.0f));
         }
 
         SECTION("streaming row-major")
@@ -6131,10 +6131,10 @@ TEST_CASE("SOA Coverage Tests")
                 30, 0x28   // x=30, y=40
             };
             const auto j = json::from_bjdata(v);
-            CHECK(j[0]["x"] == 10);
-            CHECK(j[0]["y"] == 20);
-            CHECK(j[1]["x"] == 30);
-            CHECK(j[1]["y"] == 40);
+            CHECK((j[0]["x"] == 10));
+            CHECK((j[0]["y"] == 20));
+            CHECK((j[1]["x"] == 30));
+            CHECK((j[1]["y"] == 40));
         }
     }
 
@@ -6189,7 +6189,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::row_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2 == j);
+            CHECK((j2 == j));
         }
 
         SECTION("column-major output")
@@ -6204,8 +6204,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_soa_format_t::col_major);
             // Column-major produces object output
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["id"][0] == 1);
-            CHECK(j2["id"][1] == 2);
+            CHECK((j2["id"][0] == 1));
+            CHECK((j2["id"][1] == 2));
         }
 
         SECTION("writer string encoding - fixed")
@@ -6221,8 +6221,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::row_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["s"] == "aaa");
-            CHECK(j2[2]["s"] == "ccc");
+            CHECK((j2[0]["s"] == "aaa"));
+            CHECK((j2[2]["s"] == "ccc"));
         }
 
         SECTION("writer string encoding - dict with low uniqueness")
@@ -6237,8 +6237,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::row_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["status"] == "active");
-            CHECK(j2[1]["status"] == "inactive");
+            CHECK((j2[0]["status"] == "active"));
+            CHECK((j2[1]["status"] == "inactive"));
         }
 
         SECTION("writer string encoding - offset for variable length")
@@ -6255,8 +6255,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::row_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["desc"] == "short");
-            CHECK(j2[1]["desc"] == "a much longer description");
+            CHECK((j2[0]["desc"] == "short"));
+            CHECK((j2[1]["desc"] == "a much longer description"));
         }
 
         SECTION("writer with null values")
@@ -6270,8 +6270,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["val"][0].is_null());
-            CHECK(j2["val"][1].is_null());
+            CHECK((j2["val"][0].is_null()));
+            CHECK((j2["val"][1].is_null()));
         }
 
         SECTION("writer with bool values")
@@ -6286,9 +6286,9 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["flag"][0] == true);
-            CHECK(j2["flag"][1] == false);
-            CHECK(j2["flag"][2] == true);
+            CHECK((j2["flag"][0] == true));
+            CHECK((j2["flag"][1] == false));
+            CHECK((j2["flag"][2] == true));
         }
 
         SECTION("writer various numeric types")
@@ -6301,9 +6301,9 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["u8"][0] == 255);
-            CHECK(j2["i32"][0] == -1000000);
-            CHECK(j2["f64"][0] == Approx(3.14159));
+            CHECK((j2["u8"][0] == 255));
+            CHECK((j2["i32"][0] == -1000000));
+            CHECK((j2["f64"][0] == Approx(3.14159)));
         }
 
         SECTION("writer - schema validation fails for non-uniform objects")
@@ -6319,8 +6319,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_soa_format_t::col_major);
             // Should fall back to regular array encoding
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["a"] == 1);
-            CHECK(j2[1]["b"] == 2);
+            CHECK((j2[0]["a"] == 1));
+            CHECK((j2[1]["b"] == 2));
         }
 
         SECTION("writer - schema validation fails for mixed types")
@@ -6335,8 +6335,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["val"] == 123);
-            CHECK(j2[1]["val"] == "string");
+            CHECK((j2[0]["val"] == 123));
+            CHECK((j2[1]["val"] == "string"));
         }
 
         SECTION("writer - empty array")
@@ -6346,8 +6346,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2.is_array());
-            CHECK(j2.empty());
+            CHECK((j2.is_array()));
+            CHECK((j2.empty()));
         }
 
         SECTION("writer - array with empty objects")
@@ -6358,7 +6358,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
             // Empty objects can't use SOA, falls back to regular
-            CHECK(j2.size() == 2);
+            CHECK((j2.size() == 2));
         }
 
         SECTION("writer - nested arrays/objects not supported")
@@ -6373,7 +6373,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_soa_format_t::col_major);
             // Should fall back to regular encoding
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["nested"]["a"] == 1);
+            CHECK((j2[0]["nested"]["a"] == 1));
         }
     }
 
@@ -6394,8 +6394,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0] == "same");
-            CHECK(j2["s"][99] == "same");
+            CHECK((j2["s"][0] == "same"));
+            CHECK((j2["s"][99] == "same"));
         }
 
         SECTION("all unique long strings - uses offset")
@@ -6409,7 +6409,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0].get<std::string>().find("number_0") != std::string::npos);
+            CHECK((j2["s"][0].get<std::string>().find("number_0") != std::string::npos));
         }
     }
 
@@ -6432,7 +6432,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"].size() == 300);
+            CHECK((j2["s"].size() == 300));
         }
 
         SECTION("offset with uint16 indices")
@@ -6448,7 +6448,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0].get<std::string>().size() > 100);
+            CHECK((j2["s"][0].get<std::string>().size() > 100));
         }
 
         SECTION("offset with uint32 indices")
@@ -6464,7 +6464,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0].get<std::string>().size() > 10000);
+            CHECK((j2["s"][0].get<std::string>().size() > 10000));
         }
     }
 
@@ -6485,8 +6485,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0] == "even");
-            CHECK(j2["s"][1] == "odd");
+            CHECK((j2["s"][0] == "even"));
+            CHECK((j2["s"][1] == "odd"));
         }
 
         SECTION("fixed string with padding")
@@ -6502,9 +6502,9 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0] == "a");
-            CHECK(j2["s"][1] == "bb");
-            CHECK(j2["s"][2] == "ccc");
+            CHECK((j2["s"][0] == "a"));
+            CHECK((j2["s"][1] == "bb"));
+            CHECK((j2["s"][2] == "ccc"));
         }
     }
 
@@ -6525,7 +6525,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0] == "ab");
+            CHECK((j2["s"][0] == "ab"));
         }
 
         SECTION("medium buffer - uint16 offsets")
@@ -6539,7 +6539,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0].get<std::string>().size() == 100);
+            CHECK((j2["s"][0].get<std::string>().size() == 100));
         }
     }
 
@@ -6556,7 +6556,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["key"] == "value");
+            CHECK((j2["key"] == "value"));
         }
 
         SECTION("array of non-objects")
@@ -6566,7 +6566,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2 == json::array({1, 2, 3}));
+            CHECK((j2 == json::array({1, 2, 3})));
         }
 
         SECTION("array with binary values - not supported")
@@ -6581,7 +6581,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_soa_format_t::col_major);
             // Binary not supported in SOA, should fall back
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["data"].is_binary());
+            CHECK((j2[0]["data"].is_binary()));
         }
 
         SECTION("array with nested array values - not supported")
@@ -6595,7 +6595,7 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["arr"] == json::array({1, 2}));
+            CHECK((j2[0]["arr"] == json::array({1, 2})));
         }
 
         SECTION("objects with different field counts")
@@ -6609,8 +6609,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["a"] == 1);
-            CHECK(j2[1]["a"] == 3);
+            CHECK((j2[0]["a"] == 1));
+            CHECK((j2[1]["a"] == 3));
         }
     }
 
@@ -6708,15 +6708,15 @@ TEST_CASE("SOA Coverage Tests")
                                          json::bjdata_version_t::draft4,
                                          json::bjdata_soa_format_t::row_major);
             auto j_row = json::from_bjdata(v_row);
-            CHECK(j_row == j);
+            CHECK((j_row == j));
 
             auto v_col = json::to_bjdata(j, true, true,
                                          json::bjdata_version_t::draft4,
                                          json::bjdata_soa_format_t::col_major);
             auto j_col = json::from_bjdata(v_col);
             // Col-major produces different structure but same data
-            CHECK(j_col["id"][0] == 1);
-            CHECK(j_col["name"][1] == "Bob");
+            CHECK((j_col["id"][0] == 1));
+            CHECK((j_col["name"][1] == "Bob"));
         }
 
         SECTION("empty strings roundtrip")
@@ -6731,8 +6731,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2["s"][0] == "");
-            CHECK(j2["s"][1] == "");
+            CHECK((j2["s"][0] == ""));
+            CHECK((j2["s"][1] == ""));
         }
 
         SECTION("single record roundtrip")
@@ -6745,8 +6745,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::row_major);
             auto j2 = json::from_bjdata(v);
-            CHECK(j2[0]["x"] == 42);
-            CHECK(j2[0]["y"] == "test");
+            CHECK((j2[0]["x"] == 42));
+            CHECK((j2[0]["y"] == "test"));
         }
     }
 }

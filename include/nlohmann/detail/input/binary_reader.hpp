@@ -2880,6 +2880,20 @@ class binary_reader
                     return sax->number_unsigned(lex.get_number_unsigned());
                 case tt::value_float:
                     return sax->number_float(lex.get_number_float(), lex.get_token_string());
+                case tt::uninitialized:
+                case tt::literal_true:
+                case tt::literal_false:
+                case tt::literal_null:
+                case tt::value_string:
+                case tt::begin_array:
+                case tt::begin_object:
+                case tt::end_array:
+                case tt::end_object:
+                case tt::name_separator:
+                case tt::value_separator:
+                case tt::parse_error:
+                case tt::end_of_input:
+                case tt::literal_or_value:
                 default:
                     return sax->string(s);
             }
@@ -3154,7 +3168,7 @@ class binary_reader
                     {
                         return false;
                     }
-                    data.floats.push_back(v);
+                    data.floats.push_back(static_cast<double>(v));
                     return true;
                 }
 
@@ -3305,6 +3319,20 @@ class binary_reader
                             return sax->number_unsigned(lex.get_number_unsigned());
                         case tt::value_float:
                             return sax->number_float(lex.get_number_float(), lex.get_token_string());
+                        case tt::uninitialized:
+                        case tt::literal_true:
+                        case tt::literal_false:
+                        case tt::literal_null:
+                        case tt::value_string:
+                        case tt::begin_array:
+                        case tt::begin_object:
+                        case tt::end_array:
+                        case tt::end_object:
+                        case tt::name_separator:
+                        case tt::value_separator:
+                        case tt::parse_error:
+                        case tt::end_of_input:
+                        case tt::literal_or_value:
                         default:
                             return sax->string(data.strings[ri]);
                     }
