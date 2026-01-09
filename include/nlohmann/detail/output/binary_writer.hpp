@@ -71,7 +71,7 @@ class binary_writer
     /// SOA field schema with string encoding info
     struct bjdata_soa_field_t
     {
-        std::int32_t type_marker;
+        char_int_type type_marker;
         bjdata_soa_string_encoding_t str_enc = bjdata_soa_string_encoding_t::fixed;
         std::size_t str_fixed_len = 0;
         std::vector<std::size_t> str_indices;
@@ -1884,16 +1884,6 @@ class binary_writer
     }
 
     /*!
-    @brief Write BJData SOA (Structure-of-Arrays) format (Draft 4)
-
-    Writes packed object data in either row-major (interleaved) or
-    column-major (columnar) order.
-
-    @param[in] j  JSON array of objects to serialize
-    @param[in] schema  field names and type markers
-    @param[in] row_major  true for row-major, false for column-major
-    @param[in] use_bjdata  whether to use BJData extensions
-    /*!
     @brief Analyze string field for SOA encoding
     */
     void analyze_soa_string_field(const BasicJsonType& j,
@@ -1916,7 +1906,6 @@ class binary_writer
         }
 
         std::size_t unique_count = freq_map.size();
-        double avg_len = arr.empty() ? 0.0 : static_cast<double>(total_len) / arr.size();
 
         // Force offset if threshold is 0
         if (threshold == 0.0)
@@ -2025,7 +2014,6 @@ class binary_writer
     */
     void write_soa_string_value(const bjdata_soa_field_t& field,
                                 const string_t& value,
-                                std::size_t record_index,
                                 bool use_bjdata)
     {
         if (field.str_enc == bjdata_soa_string_encoding_t::dict)
@@ -2197,7 +2185,7 @@ class binary_writer
                 }
                 else
                 {
-                    write_soa_string_value(finfo, *v.m_data.m_value.string, ri, use_bjdata);
+                    write_soa_string_value(finfo, *v.m_data.m_value.string, use_bjdata);
                 }
             }
             else if (v.type() == value_t::number_float)
