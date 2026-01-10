@@ -5880,7 +5880,7 @@ TEST_CASE("SOA Coverage Tests")
             // Buffer
             for (char c : std::string("hellobye"))
             {
-                v.push_back(c);
+                v.push_back(static_cast<std::uint8_t>(c));
             }
 
             const auto j = json::from_bjdata(v);
@@ -5913,7 +5913,7 @@ TEST_CASE("SOA Coverage Tests")
             // Buffer
             for (char c : std::string("test"))
             {
-                v.push_back(c);
+                v.push_back(static_cast<std::uint8_t>(c));
             }
 
             const auto j = json::from_bjdata(v);
@@ -5942,7 +5942,7 @@ TEST_CASE("SOA Coverage Tests")
                 v.push_back(static_cast<uint8_t>(s.size()));
                 for (char c : s)
                 {
-                    v.push_back(c);
+                    v.push_back(static_cast<std::uint8_t>(c));
                 }
             }
             v.push_back('}');
