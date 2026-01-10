@@ -2984,11 +2984,11 @@ class binary_reader
 
         struct field_data_t
         {
-            std::vector<string_t> strings{};
-            std::vector<bool> bools{};
-            std::vector<std::int64_t> integers{};
-            std::vector<std::uint64_t> unsigneds{};
-            std::vector<double> floats{};
+            std::vector<string_t> strings;
+            std::vector<bool> bools;
+            std::vector<std::int64_t> integers;
+            std::vector<std::uint64_t> unsigneds;
+            std::vector<double> floats;
         };
 
         std::vector<field_data_t> field_data(nf);

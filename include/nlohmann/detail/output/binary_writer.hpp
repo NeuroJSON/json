@@ -74,10 +74,10 @@ class binary_writer
         int type_marker{};
         bjdata_soa_string_encoding_t str_enc{bjdata_soa_string_encoding_t::fixed};
         std::size_t str_fixed_len{};
-        std::vector<std::size_t> str_indices{};
-        std::vector<string_t> str_dict{};
-        std::vector<std::size_t> str_offsets{};
-        string_t str_buffer{};
+        std::vector<std::size_t> str_indices;
+        std::vector<string_t> str_dict;
+        std::vector<std::size_t> str_offsets;
+        string_t str_buffer;
     };
 
   public:
@@ -1937,7 +1937,7 @@ class binary_writer
         std::size_t fixed_cost = max_len * arr.size();
 
         // Dict cost
-        std::size_t idx_size;
+        std::size_t idx_size = 0;
         if (unique_count <= 255)
         {
             idx_size = 1;
@@ -1953,7 +1953,7 @@ class binary_writer
         std::size_t dict_cost = (idx_size * arr.size()) + total_len + (unique_count * 2);
 
         // Offset cost
-        std::size_t off_size;
+        std::size_t off_size = 0;
         if (total_len <= 255)
         {
             off_size = 1;
@@ -2052,7 +2052,7 @@ class binary_writer
         {
             // Write index
             auto it = std::find(field.str_dict.begin(), field.str_dict.end(), value);
-            std::size_t idx = static_cast<std::size_t>(std::distance(field.str_dict.begin(), it));
+            auto idx = static_cast<std::size_t>(std::distance(field.str_dict.begin(), it));
 
             if (idx < 256)
             {
