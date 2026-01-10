@@ -12888,9 +12888,11 @@ class binary_reader
                             return false;
                         }
                         if (idx >= f.str_dict.size())
+                        {
                             return sax->parse_error(chars_read, get_token_string(),
                                                     parse_error::create(113, chars_read,
                                                             exception_message(input_format, "dict index out of range", "SOA"), nullptr));
+                        }
                         data.strings.push_back(f.str_dict[idx]);
                         return true;
                     }
