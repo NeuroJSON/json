@@ -9929,13 +9929,13 @@ class binary_reader
     /// SOA field definition for BJData Structure-of-Arrays (Draft 4)
     struct soa_field_t
     {
-        string_t name;
+        string_t name{};
         char_int_type type_marker = 0;
         std::size_t fixed_length = 0;  ///< for 'S' and 'H' types
 
         // Variable-length string support
         soa_string_encoding_t str_encoding = soa_string_encoding_t::none;
-        std::vector<string_t> str_dict;      ///< dictionary for dict encoding
+        std::vector<string_t> str_dict{};      ///< dictionary for dict encoding
         std::size_t str_index_size = 0;      ///< byte size of index (1, 2, or 4)
     };
 
@@ -12822,11 +12822,11 @@ class binary_reader
 
         struct field_data_t
         {
-            std::vector<string_t> strings;
-            std::vector<bool> bools;
-            std::vector<std::int64_t> integers;
-            std::vector<std::uint64_t> unsigneds;
-            std::vector<double> floats;
+            std::vector<string_t> strings{};
+            std::vector<bool> bools{};
+            std::vector<std::int64_t> integers{};
+            std::vector<std::uint64_t> unsigneds{};
+            std::vector<double> floats{};
         };
 
         std::vector<field_data_t> field_data(nf);
