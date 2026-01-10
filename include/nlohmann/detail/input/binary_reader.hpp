@@ -2796,11 +2796,21 @@ class binary_reader
     /*!
     @brief Get index byte size from type marker for SOA
     */
-    static constexpr std::size_t soa_index_size(char_int_type m) noexcept
+    static std::size_t soa_index_size(char_int_type m) noexcept
     {
-        return (m == 'U' || m == 'i' || m == 'B') ? 1 :
-               (m == 'u' || m == 'I') ? 2 :
-               (m == 'm' || m == 'l') ? 4 : 0;
+        if (m == 'U' || m == 'i' || m == 'B')
+        {
+            return 1;
+        }
+        if (m == 'u' || m == 'I')
+        {
+            return 2;
+        }
+        if (m == 'm' || m == 'l')
+        {
+            return 4;
+        }
+        return 0;
     }
 
     /*!
@@ -2846,9 +2856,11 @@ class binary_reader
                     return false;
                 }
                 if (idx >= f.str_dict.size())
+                {
                     return sax->parse_error(chars_read, get_token_string(),
                                             parse_error::create(113, chars_read,
                                                     exception_message(input_format, "dict index out of range", "SOA"), nullptr));
+                }
                 string_t str = f.str_dict[idx];
                 return sax->string(str);
             }
@@ -3199,14 +3211,16 @@ class binary_reader
                                                             static_cast<unsigned char>(b1));
                     const int exp = (half >> 10u) & 0x1Fu;
                     const unsigned mant = half & 0x3FFu;
-                    double val;
+                    double val = 0.0;
                     if (exp == 0)
                     {
                         val = std::ldexp(mant, -24);
                     }
                     else if (exp == 31)
+                    {
                         val = (mant == 0) ? std::numeric_limits<double>::infinity()
                               : std::numeric_limits<double>::quiet_NaN();
+                    }
                     else
                     {
                         val = std::ldexp(mant + 1024, exp - 25);
@@ -3230,20 +3244,28 @@ class binary_reader
         if (is_row_major)
         {
             for (std::size_t ri = 0; ri < count; ++ri)
+            {
                 for (std::size_t fi = 0; fi < nf; ++fi)
+                {
                     if (JSON_HEDLEY_UNLIKELY(!read_field(fi)))
                     {
                         return false;
                     }
+                }
+            }
         }
         else
         {
             for (std::size_t fi = 0; fi < nf; ++fi)
+            {
                 for (std::size_t ri = 0; ri < count; ++ri)
+                {
                     if (JSON_HEDLEY_UNLIKELY(!read_field(fi)))
                     {
                         return false;
                     }
+                }
+            }
         }
 
         // Read offset tables and resolve strings

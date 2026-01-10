@@ -5214,24 +5214,32 @@ TEST_CASE("BJData SOA Variable-Length Strings")
             std::vector<uint8_t> v =
             {
                 '{', '$', '{',
-                'i', 3, 't', 'x', 't', '[', '$', 'u', ']',
-                '}', '#', 'i', 2,
-                // Payload (2 × uint16 for offsets 0 and 150):
-                0x00, 0x00,     // offset 0 as uint16 LE
-                0x96, 0x00,     // offset 150 as uint16 LE
-                // Offset table (3 × uint16):
-                0x00, 0x00,     // 0
-                0x96, 0x00,     // 150
-                0x2C, 0x01      // 300
+                'i', 3, 't', 'x', 't', '[', '$', 'u', ']',  // field "txt" with uint16 offset encoding
+                '}', '#', 'i', 2,  // 2 records
+                // Payload: 2 offset indices (uint16 each, referring to offset table)
+                0x00, 0x00,     // record 0: offset index 0
+                0x01, 0x00,     // record 1: offset index 1
+                // Offset table: 3 entries (start, middle, end)
+                0x00, 0x00,     // offset 0
+                0x96, 0x00,     // offset 150 (150 bytes)
+                0x2C, 0x01      // offset 300 (300 bytes total)
             };
 
+            // Add 300 bytes of string data
             for (int i = 0; i < 300; i++)
             {
                 v.push_back('X');
             }
 
             const auto j = json::from_bjdata(v);
-            CHECK(j["txt"][0].get<std::string>().size() == 150);
+            CHECK(j.is_object());
+            CHECK(j.contains("txt"));
+            CHECK(j["txt"].is_array());
+            CHECK(j["txt"].size() == 2);
+            const auto str0_size = j["txt"][0].get<std::string>().size();
+            const auto str1_size = j["txt"][1].get<std::string>().size();
+            CHECK(str0_size == 150);  // First string: bytes 0-149
+            CHECK(str1_size == 150);  // Second string: bytes 150-299
         }
 
         SECTION("offset EOF errors")
@@ -6409,7 +6417,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK((j2["s"][0].get<std::string>().find("number_0") != std::string::npos));
+            const auto str_val = j2["s"][0].get<std::string>();
+            CHECK(str_val.find("number_0") != std::string::npos);
         }
     }
 
@@ -6437,7 +6446,6 @@ TEST_CASE("SOA Coverage Tests")
 
         SECTION("offset with uint16 indices")
         {
-            // Create strings totaling > 255 bytes to force uint16 offsets
             json j = json::array();
             std::string long_str(100, 'x');
             for (int i = 0; i < 5; ++i)
@@ -6448,7 +6456,14 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK((j2["s"][0].get<std::string>().size() > 100));
+
+            // Column-major produces: {"s": [str0, str1, str2, str3, str4]}
+            CHECK(j2.is_object());
+            CHECK(j2.contains("s"));
+            CHECK(j2["s"].is_array());
+            CHECK(j2["s"].size() == 5);
+            const auto str_size = j2["s"][0].get<std::string>().size();
+            CHECK(str_size > 100);
         }
 
         SECTION("offset with uint32 indices")
@@ -6464,7 +6479,14 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK((j2["s"][0].get<std::string>().size() > 10000));
+
+            // Column-major produces: {"s": [str0, str1, ...]}
+            CHECK(j2.is_object());
+            CHECK(j2.contains("s"));
+            CHECK(j2["s"].is_array());
+            CHECK(j2["s"].size() == 10);
+            const auto str_size = j2["s"][0].get<std::string>().size();
+            CHECK(str_size > 10000);
         }
     }
 
@@ -6539,7 +6561,8 @@ TEST_CASE("SOA Coverage Tests")
                                      json::bjdata_version_t::draft4,
                                      json::bjdata_soa_format_t::col_major);
             auto j2 = json::from_bjdata(v);
-            CHECK((j2["s"][0].get<std::string>().size() == 100));
+            const auto str_size = j2["s"][0].get<std::string>().size();
+            CHECK(str_size == 100);
         }
     }
 

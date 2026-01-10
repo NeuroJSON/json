@@ -74,10 +74,10 @@ class binary_writer
         std::int32_t type_marker;
         bjdata_soa_string_encoding_t str_enc = bjdata_soa_string_encoding_t::fixed;
         std::size_t str_fixed_len = 0;
-        std::vector<std::size_t> str_indices;
-        std::vector<string_t> str_dict;
-        std::vector<std::size_t> str_offsets;
-        string_t str_buffer;
+        std::vector<std::size_t> str_indices{};
+        std::vector<string_t> str_dict{};
+        std::vector<std::size_t> str_offsets{};
+        string_t str_buffer{};
     };
 
   public:
@@ -1933,16 +1933,40 @@ class binary_writer
         }
 
         // Calculate costs
-        double thresh = (threshold > 0) ? threshold : 0.3;
+        const double thresh = (threshold > 0) ? threshold : 0.3;
         std::size_t fixed_cost = max_len * arr.size();
 
         // Dict cost
-        std::size_t idx_size = unique_count <= 255 ? 1 : unique_count <= 65535 ? 2 : 4;
-        std::size_t dict_cost = idx_size * arr.size() + total_len + unique_count * 2;
+        std::size_t idx_size;
+        if (unique_count <= 255)
+        {
+            idx_size = 1;
+        }
+        else if (unique_count <= 65535)
+        {
+            idx_size = 2;
+        }
+        else
+        {
+            idx_size = 4;
+        }
+        std::size_t dict_cost = (idx_size * arr.size()) + total_len + (unique_count * 2);
 
         // Offset cost
-        std::size_t off_size = total_len <= 255 ? 1 : total_len <= 65535 ? 2 : 4;
-        std::size_t offset_cost = arr.size() * off_size + (arr.size() + 1) * off_size + total_len;
+        std::size_t off_size;
+        if (total_len <= 255)
+        {
+            off_size = 1;
+        }
+        else if (total_len <= 65535)
+        {
+            off_size = 2;
+        }
+        else
+        {
+            off_size = 4;
+        }
+        std::size_t offset_cost = (arr.size() * off_size) + ((arr.size() + 1) * off_size) + total_len;
 
         // Decision logic
         if (unique_count <= static_cast<std::size_t>(static_cast<double>(arr.size()) * thresh) &&
@@ -2002,7 +2026,7 @@ class binary_writer
         {
             // [$U] or [$u] or [$m]
             std::size_t max_offset = field.str_buffer.size();
-            char index_type = max_offset <= 255 ? 'U' : max_offset <= 65535 ? 'u' : 'm';
+            const char index_type = (max_offset <= 255) ? 'U' : (max_offset <= 65535) ? 'u' : 'm';
 
             oa->write_character(to_char_type(0x5B));  // '['
             oa->write_character(to_char_type(0x24));  // '$'
