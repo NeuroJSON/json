@@ -1916,7 +1916,7 @@ class binary_writer
         std::size_t unique_count = freq_map.size();
 
         // Force offset if threshold is 0
-        if (threshold == 0.0)
+        if (std::abs(threshold) < std::numeric_limits<double>::epsilon())
         {
             field_info.str_enc = bjdata_soa_string_encoding_t::offset;
 

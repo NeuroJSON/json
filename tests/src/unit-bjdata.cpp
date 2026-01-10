@@ -4628,7 +4628,7 @@ TEST_CASE("BJData SOA (Structure-of-Arrays)")
             };
 
             const auto j = json::from_bjdata(v);
-            CHECK(j[0]["v"] == doctest::Approx(3.14159f));
+            CHECK(j[0]["v"] == doctest::Approx(3.14159));
         }
 
         SECTION("float64 (D)")
