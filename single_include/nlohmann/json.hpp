@@ -9932,6 +9932,7 @@ class binary_reader
         string_t name{};
         char_int_type type_marker = 0;
         std::size_t fixed_length = 0;  ///< for 'S' and 'H' types
+        std::size_t array_size = 0;    ///< >0: fixed-size array column, e.g. [DDD] = 3 doubles
 
         // Variable-length string support
         soa_string_encoding_t str_encoding = soa_string_encoding_t::none;
@@ -12656,6 +12657,22 @@ class binary_reader
     */
     bool get_bjdata_soa_value_ex(const soa_field_t& f)
     {
+        if (f.array_size > 0)  // fixed-size array column, e.g. [DDD] = 3 doubles
+        {
+            if (JSON_HEDLEY_UNLIKELY(!sax->start_array(f.array_size)))
+            {
+                return false;
+            }
+            for (std::size_t i = 0; i < f.array_size; ++i)
+            {
+                if (JSON_HEDLEY_UNLIKELY(!get_ubjson_value(f.type_marker)))
+                {
+                    return false;
+                }
+            }
+            return sax->end_array();
+        }
+
         if (f.type_marker == 0x54)
         {
             get();
@@ -12846,6 +12863,122 @@ class binary_reader
         {
             const auto& f = schema[fi];
             auto& data = field_data[fi];
+
+            if (f.array_size > 0)  // fixed-size array column, e.g. [DDD] = 3 doubles
+            {
+                for (std::size_t k = 0; k < f.array_size; ++k)
+                {
+                    switch (f.type_marker)
+                    {
+                        case 'D':
+                        {
+                            double v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.floats.push_back(v);
+                            break;
+                        }
+                        case 'd':
+                        {
+                            float v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.floats.push_back(static_cast<double>(v));
+                            break;
+                        }
+                        case 'L':
+                        {
+                            std::int64_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.integers.push_back(v);
+                            break;
+                        }
+                        case 'l':
+                        {
+                            std::int32_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.integers.push_back(v);
+                            break;
+                        }
+                        case 'I':
+                        {
+                            std::int16_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.integers.push_back(v);
+                            break;
+                        }
+                        case 'i':
+                        {
+                            std::int8_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.integers.push_back(v);
+                            break;
+                        }
+                        case 'M':
+                        {
+                            std::uint64_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.unsigneds.push_back(v);
+                            break;
+                        }
+                        case 'm':
+                        {
+                            std::uint32_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.unsigneds.push_back(v);
+                            break;
+                        }
+                        case 'u':
+                        {
+                            std::uint16_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.unsigneds.push_back(v);
+                            break;
+                        }
+                        case 'U':
+                        case 'B':
+                        {
+                            std::uint8_t v{};
+                            if (!get_number(input_format, v))
+                            {
+                                return false;
+                            }
+                            data.unsigneds.push_back(v);
+                            break;
+                        }
+                        default:
+                            return sax->parse_error(chars_read, get_token_string(),
+                                                    parse_error::create(113, chars_read,
+                                                            exception_message(input_format, "unsupported array SOA element type", "SOA"), nullptr));
+                    }
+                }
+                return true;
+            }
 
             switch (f.type_marker)
             {
@@ -13157,6 +13290,46 @@ class binary_reader
             const auto& f = schema[fi];
             auto& data = field_data[fi];
 
+            if (f.array_size > 0)  // fixed-size array column, e.g. [DDD] = 3 doubles
+            {
+                if (JSON_HEDLEY_UNLIKELY(!sax->start_array(f.array_size)))
+                {
+                    return false;
+                }
+                const std::size_t base = ri * f.array_size;
+                for (std::size_t k = 0; k < f.array_size; ++k)
+                {
+                    bool ok = false;
+                    switch (f.type_marker)
+                    {
+                        case 'D':
+                        case 'd':
+                            ok = sax->number_float(static_cast<number_float_t>(data.floats[base + k]), "");
+                            break;
+                        case 'L':
+                        case 'l':
+                        case 'I':
+                        case 'i':
+                            ok = sax->number_integer(data.integers[base + k]);
+                            break;
+                        case 'M':
+                        case 'm':
+                        case 'u':
+                        case 'U':
+                        case 'B':
+                            ok = sax->number_unsigned(data.unsigneds[base + k]);
+                            break;
+                        default:
+                            ok = false;
+                    }
+                    if (JSON_HEDLEY_UNLIKELY(!ok))
+                    {
+                        return false;
+                    }
+                }
+                return sax->end_array();
+            }
+
             switch (f.type_marker)
             {
                 case 0x54:
@@ -13219,35 +13392,12 @@ class binary_reader
             }
         };
 
-        // Emit results
-        if (is_row_major)
+        // Emit results as array of objects (row-major) regardless of input orientation
+        if (JSON_HEDLEY_UNLIKELY(!sax->start_array(count)))
         {
-            if (JSON_HEDLEY_UNLIKELY(!sax->start_array(count)))
-            {
-                return false;
-            }
-            for (std::size_t ri = 0; ri < count; ++ri)
-            {
-                if (JSON_HEDLEY_UNLIKELY(!sax->start_object(nf)))
-                {
-                    return false;
-                }
-                for (std::size_t fi = 0; fi < nf; ++fi)
-                {
-                    string_t key = schema[fi].name;
-                    if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !emit_value(fi, ri)))
-                    {
-                        return false;
-                    }
-                }
-                if (JSON_HEDLEY_UNLIKELY(!sax->end_object()))
-                {
-                    return false;
-                }
-            }
-            return sax->end_array();
+            return false;
         }
-        else
+        for (std::size_t ri = 0; ri < count; ++ri)
         {
             if (JSON_HEDLEY_UNLIKELY(!sax->start_object(nf)))
             {
@@ -13256,24 +13406,17 @@ class binary_reader
             for (std::size_t fi = 0; fi < nf; ++fi)
             {
                 string_t key = schema[fi].name;
-                if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !sax->start_array(count)))
-                {
-                    return false;
-                }
-                for (std::size_t ri = 0; ri < count; ++ri)
-                {
-                    if (JSON_HEDLEY_UNLIKELY(!emit_value(fi, ri)))
-                    {
-                        return false;
-                    }
-                }
-                if (JSON_HEDLEY_UNLIKELY(!sax->end_array()))
+                if (JSON_HEDLEY_UNLIKELY(!sax->key(key) || !emit_value(fi, ri)))
                 {
                     return false;
                 }
             }
-            return sax->end_object();
+            if (JSON_HEDLEY_UNLIKELY(!sax->end_object()))
+            {
+                return false;
+            }
         }
+        return sax->end_array();
     }
 
 
@@ -13331,19 +13474,38 @@ class binary_reader
 
             field.type_marker = current;
 
-            // Handle '[' as array notation for variable-length strings
+            // Handle '[': numeric array column [DDD] or string column [$...]
             if (current == 0x5B)  // '['
             {
-                field.type_marker = 0x53;  // String type
-
                 get();
-                if (JSON_HEDLEY_UNLIKELY(current != 0x24))  // '$'
+                if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA array column")))
                 {
-                    return sax->parse_error(chars_read, get_token_string(),
-                                            parse_error::create(113, chars_read,
-                                                    exception_message(input_format, "expected '$' after '['", "SOA"), nullptr));
+                    return false;
                 }
 
+                if (current != 0x24)  // not '$' → bare type markers: [DDD] = 3 doubles
+                {
+                    field.type_marker = current;
+                    field.array_size = 1;
+                    while (true)
+                    {
+                        get();
+                        if (JSON_HEDLEY_UNLIKELY(!unexpect_eof(input_format, "SOA array column")))
+                        {
+                            return false;
+                        }
+                        if (current == 0x5D)  // ']'
+                        {
+                            break;
+                        }
+                        ++field.array_size;
+                    }
+                    schema.push_back(std::move(field));
+                    continue;
+                }
+
+                // '$' → string/offset encoding
+                field.type_marker = 0x53;
                 get();
                 if (current == 0x53)  // 'S' - dictionary [$S#n strings...]
                 {
@@ -13431,7 +13593,7 @@ class binary_reader
             return false;
         }
 
-        if (has_offset_fields)
+        if (has_offset_fields || !is_row_major)
         {
             return parse_bjdata_soa_buffered(schema, count, is_row_major);
         }
